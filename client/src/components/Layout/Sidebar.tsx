@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -6,23 +6,21 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useAuth } from '@/contexts/AuthContext';
 import { 
-  Briefcase, 
-  User, 
-  MessageSquare, 
-  BarChart3, 
-  Settings, 
   Home,
   Search,
   BookmarkIcon,
+  User,
+  MessageSquare,
   Calendar,
+  BarChart3,
+  Building2,
+  Mail,
+  Settings,
   HelpCircle,
   ChevronLeft,
   ChevronRight,
-  Building2,
-  Mail
+  Briefcase
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -33,7 +31,6 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) => {
   const location = useLocation();
-  const { user } = useAuth();
 
   const mainNavItems = [
     { path: '/', label: 'Dashboard', icon: Home },
@@ -53,189 +50,201 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
   ];
 
   return (
-    <div className={cn("pb-12 min-h-screen bg-background border-r transition-all duration-300", 
-      isCollapsed ? "w-16" : "w-64", className)}>
-      <div className="space-y-4 py-4">
-        {/* Header with Logo and Toggle */}
-        <div className="px-3 py-2">
-          <div className="flex items-center justify-between">
+    <div className={cn(
+      "relative flex flex-col h-full bg-background border-r transition-all duration-300",
+      isCollapsed ? "w-16" : "w-64",
+      className
+    )}>
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b">
+        <AnimatePresence>
+          {!isCollapsed && (
+            <motion.div
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: 'auto' }}
+              exit={{ opacity: 0, width: 0 }}
+              className="flex items-center space-x-2"
+            >
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                <Briefcase className="h-4 w-4 text-white" />
+              </div>
+              <span className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                JobFinder AI
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          className="h-8 w-8 p-0 shrink-0"
+        >
+          {isCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+
+      {/* Scrollable Navigation */}
+      <ScrollArea className="flex-1 px-3">
+        <div className="space-y-6 py-4">
+          {/* Main Navigation */}
+          <div className="space-y-2">
             <AnimatePresence>
               {!isCollapsed && (
-                <motion.div
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 'auto' }}
-                  exit={{ opacity: 0, width: 0 }}
-                  className="flex items-center space-x-2"
+                <motion.h2
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider"
                 >
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                    <Briefcase className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                    JobFinder AI
-                  </span>
-                </motion.div>
+                  Main Menu
+                </motion.h2>
               )}
             </AnimatePresence>
             
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onToggle}
-              className="h-8 w-8 p-0"
-            >
-              {isCollapsed ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
-                <ChevronLeft className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-
-        {/* Main Navigation */}
-        <div className="px-3 py-2">
-          <AnimatePresence>
-            {!isCollapsed && (
-              <motion.h2
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="mb-2 px-4 text-sm font-semibold tracking-tight text-muted-foreground"
-              >
-                MAIN MENU
-              </motion.h2>
-            )}
-          </AnimatePresence>
-          
-          <div className="space-y-1">
-            {mainNavItems.map(({ path, label, icon: Icon, badge }) => (
-              <Link key={path} to={path}>
-                <motion.div
-                  whileHover={{ scale: 1.02, x: isCollapsed ? 0 : 4 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Button
-                    variant={location.pathname === path ? "secondary" : "ghost"}
-                    className={cn(
-                      "w-full justify-start relative",
-                      isCollapsed ? "px-2" : "px-4",
-                      location.pathname === path && "bg-gradient-to-r from-primary/10 to-secondary/10 border-l-4 border-primary"
-                    )}
+            <div className="space-y-1">
+              {mainNavItems.map(({ path, label, icon: Icon, badge }) => (
+                <Link key={path} to={path}>
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
-                    <Icon className={cn("h-4 w-4", isCollapsed ? "mx-auto" : "mr-3")} />
-                    <AnimatePresence>
-                      {!isCollapsed && (
-                        <motion.span
-                          initial={{ opacity: 0, width: 0 }}
-                          animate={{ opacity: 1, width: 'auto' }}
-                          exit={{ opacity: 0, width: 0 }}
-                          className="truncate"
-                        >
-                          {label}
-                        </motion.span>
+                    <Button
+                      variant={location.pathname === path ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full justify-start relative group",
+                        isCollapsed ? "px-2" : "px-3",
+                        location.pathname === path && "bg-primary/10 text-primary border-r-2 border-primary"
                       )}
-                    </AnimatePresence>
-                    {badge && !isCollapsed && (
-                      <Badge variant="destructive" className="ml-auto h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
-                        {badge}
-                      </Badge>
-                    )}
-                    {badge && isCollapsed && (
-                      <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full" />
-                    )}
-                  </Button>
-                </motion.div>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Secondary Navigation */}
-        <div className="px-3 py-2">
-          <AnimatePresence>
-            {!isCollapsed && (
-              <motion.h2
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="mb-2 px-4 text-sm font-semibold tracking-tight text-muted-foreground"
-              >
-                TOOLS & MORE
-              </motion.h2>
-            )}
-          </AnimatePresence>
-          
-          <div className="space-y-1">
-            {secondaryNavItems.map(({ path, label, icon: Icon, badge }) => (
-              <Link key={path} to={path}>
-                <motion.div
-                  whileHover={{ scale: 1.02, x: isCollapsed ? 0 : 4 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Button
-                    variant={location.pathname === path ? "secondary" : "ghost"}
-                    className={cn(
-                      "w-full justify-start relative",
-                      isCollapsed ? "px-2" : "px-4",
-                      location.pathname === path && "bg-gradient-to-r from-primary/10 to-secondary/10 border-l-4 border-primary"
-                    )}
-                  >
-                    <Icon className={cn("h-4 w-4", isCollapsed ? "mx-auto" : "mr-3")} />
-                    <AnimatePresence>
-                      {!isCollapsed && (
-                        <motion.span
-                          initial={{ opacity: 0, width: 0 }}
-                          animate={{ opacity: 1, width: 'auto' }}
-                          exit={{ opacity: 0, width: 0 }}
-                          className="truncate"
-                        >
-                          {label}
-                        </motion.span>
+                    >
+                      <Icon className={cn("h-4 w-4 shrink-0", isCollapsed ? "mx-auto" : "mr-3")} />
+                      <AnimatePresence>
+                        {!isCollapsed && (
+                          <motion.span
+                            initial={{ opacity: 0, width: 0 }}
+                            animate={{ opacity: 1, width: 'auto' }}
+                            exit={{ opacity: 0, width: 0 }}
+                            className="truncate"
+                          >
+                            {label}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                      
+                      {/* Badge */}
+                      {badge && (
+                        <>
+                          {!isCollapsed ? (
+                            <Badge variant="destructive" className="ml-auto h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                              {badge}
+                            </Badge>
+                          ) : (
+                            <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full" />
+                          )}
+                        </>
                       )}
-                    </AnimatePresence>
-                    {badge && !isCollapsed && (
-                      <Badge variant="destructive" className="ml-auto h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
-                        {badge}
-                      </Badge>
-                    )}
-                    {badge && isCollapsed && (
-                      <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full" />
-                    )}
-                  </Button>
-                </motion.div>
-              </Link>
-            ))}
+                      
+                      {/* Tooltip for collapsed state */}
+                      {isCollapsed && (
+                        <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                          {label}
+                          {badge && (
+                            <Badge variant="destructive" className="ml-2 h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs">
+                              {badge}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </Button>
+                  </motion.div>
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* User Profile at Bottom */}
-        <div className="absolute bottom-4 left-0 right-0 px-3">
-          <div className={cn(
-            "flex items-center space-x-3 p-3 rounded-lg bg-gradient-to-r from-accent/10 to-accent/5 border",
-            isCollapsed && "justify-center"
-          )}>
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={user?.avatar} />
-              <AvatarFallback>{user?.name?.[0]}</AvatarFallback>
-            </Avatar>
+          <Separator />
+
+          {/* Secondary Navigation */}
+          <div className="space-y-2">
             <AnimatePresence>
               {!isCollapsed && (
-                <motion.div
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 'auto' }}
-                  exit={{ opacity: 0, width: 0 }}
-                  className="flex-1 min-w-0"
+                <motion.h2
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider"
                 >
-                  <p className="text-sm font-medium truncate">{user?.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                </motion.div>
+                  Tools & More
+                </motion.h2>
               )}
             </AnimatePresence>
+            
+            <div className="space-y-1">
+              {secondaryNavItems.map(({ path, label, icon: Icon, badge }) => (
+                <Link key={path} to={path}>
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Button
+                      variant={location.pathname === path ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full justify-start relative group",
+                        isCollapsed ? "px-2" : "px-3",
+                        location.pathname === path && "bg-primary/10 text-primary border-r-2 border-primary"
+                      )}
+                    >
+                      <Icon className={cn("h-4 w-4 shrink-0", isCollapsed ? "mx-auto" : "mr-3")} />
+                      <AnimatePresence>
+                        {!isCollapsed && (
+                          <motion.span
+                            initial={{ opacity: 0, width: 0 }}
+                            animate={{ opacity: 1, width: 'auto' }}
+                            exit={{ opacity: 0, width: 0 }}
+                            className="truncate"
+                          >
+                            {label}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                      
+                      {/* Badge */}
+                      {badge && (
+                        <>
+                          {!isCollapsed ? (
+                            <Badge variant="destructive" className="ml-auto h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                              {badge}
+                            </Badge>
+                          ) : (
+                            <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full" />
+                          )}
+                        </>
+                      )}
+                      
+                      {/* Tooltip for collapsed state */}
+                      {isCollapsed && (
+                        <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                          {label}
+                          {badge && (
+                            <Badge variant="destructive" className="ml-2 h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs">
+                              {badge}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </Button>
+                  </motion.div>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 };

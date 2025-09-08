@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuthStore } from '@/stores/authStore';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
 
@@ -37,7 +37,7 @@ interface AuthDialogProps {
 const AuthDialog: React.FC<AuthDialogProps> = ({ open, onOpenChange }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState('login');
-  const { login, signup, isLoading } = useAuth();
+  const { login, signup, isLoading } = useAuthStore();
 
   const loginForm = useForm({
     resolver: zodResolver(loginSchema),
@@ -51,6 +51,8 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ open, onOpenChange }) => {
 
   const onLogin = async (data: z.infer<typeof loginSchema>) => {
     try {
+        console.log("Login form values:", data);
+
       await login(data.email, data.password);
       onOpenChange(false);
     } catch (error) {

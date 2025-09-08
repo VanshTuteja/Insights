@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider } from '@/contexts/ThemeContext';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore } from '@/stores/themeStore';
 import Layout from '@/components/Layout/Layout';
 import LandingPage from '@/components/LandingPage';
 import Dashboard from '@/pages/Dashboard';
@@ -15,11 +15,11 @@ import EmployerDashboard from '@/pages/EmployerDashboard';
 import Messaging from '@/pages/Messaging';
 
 const AppRoutes: React.FC = () => {
-  const { user } = useAuth();
+  const { user } = useAuthStore();
 
-  // if (!user) {
-  //   return <LandingPage />;
-  // }
+  if (!user) {
+    return <LandingPage />;
+  }
 
   return (
     <Routes>
@@ -39,14 +39,16 @@ const AppRoutes: React.FC = () => {
 };
 
 function App() {
+  // Initialize theme on app start
+  React.useEffect(() => {
+    const { theme } = useThemeStore.getState();
+    document.documentElement.setAttribute('data-theme', theme);
+  }, []);
+
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
-      </AuthProvider>
-    </ThemeProvider>
+    <Router>
+      <AppRoutes />
+    </Router>
   );
 }
 

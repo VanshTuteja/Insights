@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Briefcase, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useThemeStore } from '@/stores/themeStore';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,7 @@ interface LandingNavbarProps {
 
 const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { theme, setTheme, themes } = useTheme();
+  const { theme, setTheme, themes } = useThemeStore();
 
   const navItems = [
     { label: 'Features', href: '#features' },
@@ -70,7 +70,7 @@ const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {themes.map((t) => (
+                {themes.map((t:any) => (
                   <DropdownMenuItem
                     key={t.name}
                     onClick={() => setTheme(t.name)}

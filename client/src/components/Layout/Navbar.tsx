@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Briefcase, Palette, LogOut, Bell, Edit, Menu } from 'lucide-react';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { Briefcase, Palette, LogOut, Bell, Edit ,Menu} from 'lucide-react';
+import { useThemeStore } from '@/stores/themeStore';
+import { useAuthStore } from '@/stores/authStore';
 import ProfileDialog from '@/components/ProfileDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,8 +21,8 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
-  const { theme, setTheme, themes } = useTheme();
-  const { user, logout } = useAuth();
+  const { theme, setTheme, themes } = useThemeStore();
+  const { user, logout } = useAuthStore();
   const [profileDialogOpen, setProfileDialogOpen] = React.useState(false);
   const [notificationCount] = React.useState(3); // Mock notification count
 
@@ -82,7 +82,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {themes.map((t) => (
+                {themes.map((t:any) => (
                   <DropdownMenuItem
                     key={t.name}
                     onClick={() => setTheme(t.name)}

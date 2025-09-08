@@ -9,7 +9,7 @@ import CarouselSection from '@/components/CarouselSection';
 import JobCard from '@/components/JobCard';
 import JobDetailsDialog from '@/components/JobDetailsDialog';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/hooks/use-toast';
 import { 
   Search, 
@@ -33,7 +33,7 @@ const Dashboard: React.FC = () => {
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
-  const { user } = useAuth();
+  const { user } = useAuthStore();
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1500);
