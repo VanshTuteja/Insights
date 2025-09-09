@@ -36,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
     { path: '/', label: 'Dashboard', icon: Home },
     { path: '/jobs', label: 'Find Jobs', icon: Search },
     { path: '/saved', label: 'Saved Jobs', icon: BookmarkIcon, badge: 5 },
+    { path: '/profile', label: 'My Profile', icon: User },
     { path: '/resume', label: 'Resume Builder', icon: User },
     { path: '/interview', label: 'Interview Prep', icon: MessageSquare },
     { path: '/interviews', label: 'My Interviews', icon: Calendar, badge: 2 },

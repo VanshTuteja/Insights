@@ -1,15 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Briefcase, Menu, X } from 'lucide-react';
+import { Briefcase, Menu, X, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useThemeStore } from '@/stores/themeStore';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Palette } from 'lucide-react';
 
 interface LandingNavbarProps {
   onAuthOpen: () => void;
@@ -17,6 +10,7 @@ interface LandingNavbarProps {
 
 const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const { theme, setTheme, themes } = useThemeStore();
 
   const navItems = [
@@ -25,6 +19,31 @@ const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
     { label: 'Testimonials', href: '#testimonials' },
     { label: 'Pricing', href: '#pricing' },
   ];
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.theme-dropdown') && !target.closest('.theme-dropdown-trigger')) {
+        setThemeDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  // Close dropdown on escape key
+  React.useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setThemeDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscapeKey);
+    return () => document.removeEventListener('keydown', handleEscapeKey);
+  }, []);
 
   return (
     <motion.nav
@@ -62,31 +81,48 @@ const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
 
           <div className="flex items-center space-x-4">
             {/* Theme Selector */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Palette className="h-4 w-4 mr-2" />
-                  Theme
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {themes.map((t:any) => (
-                  <DropdownMenuItem
-                    key={t.name}
-                    onClick={() => setTheme(t.name)}
-                    className={theme === t.name ? 'bg-accent' : ''}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <div
-                        className="w-4 h-4 rounded-full"
-                        style={{ background: `linear-gradient(45deg, ${t.primary}, ${t.secondary})` }}
-                      />
-                      <span>{t.label}</span>
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="relative">
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="theme-dropdown-trigger"
+                onClick={() => setThemeDropdownOpen(!themeDropdownOpen)}
+              >
+                <Palette className="h-4 w-4 mr-2" />
+                Theme
+              </Button>
+              
+              {themeDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.1 }}
+                  className="theme-dropdown absolute right-0 mt-2 w-48 bg-popover border rounded-md shadow-lg z-50"
+                >
+                  <div className="p-1">
+                    {themes.map((t: any) => (
+                      <button
+                        key={t.name}
+                        onClick={() => {
+                          setTheme(t.name);
+                          setThemeDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center space-x-2 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors ${
+                          theme === t.name ? 'bg-accent' : ''
+                        }`}
+                      >
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ background: `linear-gradient(45deg, ${t.primary}, ${t.secondary})` }}
+                        />
+                        <span>{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </div>
 
             {/* Auth Buttons */}
             <div className="hidden md:flex items-center space-x-2">

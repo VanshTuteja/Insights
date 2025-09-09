@@ -10,6 +10,28 @@ interface User {
   location?: string;
   bio?: string;
   website?: string;
+  jobTitle?: string;
+  company?: string;
+  experience?: string;
+  education?: string;
+  skills?: string[];
+  preferences?: {
+    jobTypes: string[];
+    salaryRange: number[];
+    locations: string[];
+    industries: string[];
+    notifications: {
+      email: boolean;
+      push: boolean;
+      jobAlerts: boolean;
+      messages: boolean;
+    };
+    privacy: {
+      profileVisible: boolean;
+      showSalary: boolean;
+      showContact: boolean;
+    };
+  };
 }
 
 interface AuthState {

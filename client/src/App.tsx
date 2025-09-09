@@ -13,6 +13,9 @@ import InterviewPrep from '@/pages/InterviewPrep';
 import Insights from '@/pages/Insights';
 import EmployerDashboard from '@/pages/EmployerDashboard';
 import Messaging from '@/pages/Messaging';
+import Settings from './components/Settings';
+import Profile from './pages/Profile';
+
 
 const AppRoutes: React.FC = () => {
   const { user } = useAuthStore();
@@ -33,6 +36,8 @@ const AppRoutes: React.FC = () => {
         <Route path="insights" element={<Insights />} />
         <Route path="employer" element={<EmployerDashboard />} />
         <Route path="messaging" element={<Messaging />} />
+        <Route path="profile" element={<Profile />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   );
@@ -46,7 +51,7 @@ function App() {
   }, []);
 
   return (
-    <Router>
+    <Router >
       <AppRoutes />
     </Router>
   );
