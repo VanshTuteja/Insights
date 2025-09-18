@@ -15,6 +15,7 @@ import EmployerDashboard from '@/pages/EmployerDashboard';
 import Messaging from '@/pages/Messaging';
 import Settings from './components/Settings';
 import Profile from './pages/Profile';
+import HelpSupport from './pages/HelpSupport';
 
 
 const AppRoutes: React.FC = () => {
@@ -38,6 +39,7 @@ const AppRoutes: React.FC = () => {
         <Route path="messaging" element={<Messaging />} />
         <Route path="profile" element={<Profile />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="help" element={<HelpSupport />} />
       </Route>
     </Routes>
   );

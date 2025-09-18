@@ -42,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const mockUser = {
       id: '1',
-      name: 'Vansh Tuteja',
+      name: email.split('@')[0], // Use email username as name
       email,
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
     };

@@ -19,10 +19,8 @@ import {
   Star, 
   Calendar, 
   Target, 
-  Award, 
   MessageCircle,
   Bell,
-  Activity,
   FileText,
   Zap
 } from 'lucide-react';
@@ -189,7 +187,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleApplyJob = (jobId: string) => {
+  const handleApplyJob = () => {
     toast({
       title: 'Application submitted',
       description: 'Your application has been sent to the employer.',
@@ -208,9 +206,7 @@ const Dashboard: React.FC = () => {
     <div className="space-y-8">
       {/* Welcome Message */}
       <AnimatedSection>
-        <h1 className="text-2xl font-bold">Welcome back, Vansh Tuteja
-       
-          👋</h1>
+        <h1 className="text-2xl font-bold">Welcome back, {user?.name || 'User'} 👋</h1>
         <p className="text-muted-foreground">Here's what's happening with your job search today.</p>
       </AnimatedSection>
 

@@ -64,10 +64,10 @@ export const useAuthStore = create<AuthState>()(
           const userData = await response.json();
           set({ user: userData, isLoading: false });
         } catch (error) {
-          // Fallback to mock data for demo
+          // Fallback to mock data for demo - use email as name if no specific name provided
           const mockUser = {
             id: '1',
-            name: 'Vansh Tuteja',
+            name: email.split('@')[0], // Use email username as fallback
             email,
             avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
           };
