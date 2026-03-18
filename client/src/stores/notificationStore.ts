@@ -9,10 +9,17 @@ export interface Notification {
     title: string;
     description: string;
     read: boolean;
-    jobId?: any;
+    jobId?: string | { _id: string } | null;
     createdAt: string;
     updatedAt: string;
 }
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (axios.isAxiosError(error)) {
+        return (error.response?.data as { error?: string } | undefined)?.error || fallback;
+    }
+    return fallback;
+};
 
 interface NotificationState {
     notifications: Notification[];
@@ -43,8 +50,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
             });
             const { notifications, unreadCount } = response.data.data;
             set({ notifications, unreadCount, isLoading: false });
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.error || 'Failed to fetch notifications';
+        } catch (error: unknown) {
+            const errorMessage = getErrorMessage(error, 'Failed to fetch notifications');
             set({ error: errorMessage, isLoading: false });
         }
     },
@@ -58,8 +65,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
                 ),
                 unreadCount: Math.max(0, state.unreadCount - 1)
             }));
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.error || 'Failed to mark notification as read';
+        } catch (error: unknown) {
+            const errorMessage = getErrorMessage(error, 'Failed to mark notification as read');
             set({ error: errorMessage });
         }
     },
@@ -71,8 +78,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
                 notifications: state.notifications.map(n => ({ ...n, read: true })),
                 unreadCount: 0
             }));
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.error || 'Failed to mark all as read';
+        } catch (error: unknown) {
+            const errorMessage = getErrorMessage(error, 'Failed to mark all as read');
             set({ error: errorMessage });
         }
     },
@@ -83,8 +90,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
             set(state => ({
                 notifications: state.notifications.filter(n => n._id !== notificationId),
             }));
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.error || 'Failed to delete notification';
+        } catch (error: unknown) {
+            const errorMessage = getErrorMessage(error, 'Failed to delete notification');
             set({ error: errorMessage });
         }
     },

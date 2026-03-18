@@ -58,8 +58,8 @@ export const login = async (req: Request<{}, ApiResponse, LoginRequest>, res: Re
     logger.auth('login', user._id.toString(), email, true);
 
     return res.json({
-        success: true,
-        data: {
+      success: true,
+      data: {
         user: withProfileCompletion(user),
         token
       },
@@ -147,7 +147,12 @@ export const signup = async (req: Request, res: Response) => {
     }
 
     // Send OTP email
-    await emailService.sendOTPEmail(email, otp, 'signup');
+    // await emailService.sendOTPEmail(email, otp, 'signup');
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      await emailService.sendOTPEmail(email, otp, 'signup');
+    } else {
+      console.log(`OTP (DEV MODE): ${otp}`);
+    }
 
     logger.info('OTP sent successfully', { email });
 
@@ -266,7 +271,12 @@ export const resendOTP = async (req: Request, res: Response) => {
     user.otpResendAvailableAt = new Date(Date.now() + OTP_RESEND_COOLDOWN_MS);
     await user.save();
 
-    await emailService.sendOTPEmail(email, otp, otpPurpose === 'verify-email' ? 'signup' : 'password-reset');
+    // await emailService.sendOTPEmail(email, otp, otpPurpose === 'verify-email' ? 'signup' : 'password-reset');
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      await emailService.sendOTPEmail(email, otp, 'signup');
+    } else {
+      console.log(`OTP (DEV MODE): ${otp}`);
+    }
 
     return res.json({ success: true, message: 'OTP resent successfully' });
   } catch (error: any) {
@@ -438,14 +448,14 @@ export const updateProfile = async (req: AuthRequest<{}, ApiResponse, UpdateProf
 
     // Check if email is being updated and if it's already taken
     if (updates.email) {
-      const existingUser = await User.findOne({ 
-        email: updates.email, 
-        _id: { $ne: userId } 
+      const existingUser = await User.findOne({
+        email: updates.email,
+        _id: { $ne: userId }
       });
       if (existingUser) {
-        logger.warn('Profile update failed - email already taken', { 
-          userId, 
-          email: updates.email 
+        logger.warn('Profile update failed - email already taken', {
+          userId,
+          email: updates.email
         });
         return res.status(400).json({
           success: false,

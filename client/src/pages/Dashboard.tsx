@@ -29,28 +29,51 @@ import {
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedJob, setSelectedJob] = useState<any>(null);
   const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
   const { user } = useAuthStore();
-  const { notifications, unreadCount, fetchNotifications } = useNotificationStore();
+  const { notifications, unreadCount, fetchNotifications, markAsRead, deleteNotification } = useNotificationStore();
+  const [notificationLoading, setNotificationLoading] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1500);
     return () => clearTimeout(timer);
   }, []);
 
-  // Fetch notifications on component mount
+  // Refresh notifications frequently while the dashboard is open.
   useEffect(() => {
-    fetchNotifications(10, 1);
+  if (user?.role !== 'jobseeker') {
+    return;
+  }
 
-    // Set up polling interval (check for new notifications every 30 seconds)
-    const pollInterval = setInterval(() => {
+  const fetchInitial = async () => {
+    setNotificationLoading(true);
+    await fetchNotifications(10, 1);
+    setNotificationLoading(false);
+  };
+
+  fetchInitial();
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
       fetchNotifications(10, 1);
-    }, 30000);
+    }
+  };
 
-    return () => clearInterval(pollInterval);
-  }, [fetchNotifications]);
+  // ✅ FIXED: loading handled during polling
+  const pollInterval = setInterval(async () => {
+    setNotificationLoading(true);
+    await fetchNotifications(10, 1);
+    setNotificationLoading(false);
+  }, 3000);
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  return () => {
+    clearInterval(pollInterval);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+}, [user?.role]); // ✅ removed fetchNotifications
 
   const stats = [
     { label: 'Jobs Available', value: '2,847', icon: Briefcase, color: 'from-blue-500 to-blue-600', change: '+12%' },
@@ -94,6 +117,9 @@ const Dashboard: React.FC = () => {
       postedTime: '3 days ago',
     },
   ];
+
+  type RecommendedJob = (typeof recommendedJobs)[number];
+  const [selectedJob, setSelectedJob] = useState<RecommendedJob | null>(null);
 
   const upcomingInterviews = [
     {
@@ -153,7 +179,7 @@ const Dashboard: React.FC = () => {
     },
   ];
 
-  const handleViewDetails = (job: any) => {
+  const handleViewDetails = (job: RecommendedJob) => {
     setSelectedJob(job);
     setJobDetailsOpen(true);
   };
@@ -336,7 +362,7 @@ const Dashboard: React.FC = () => {
                     <Bell className="h-5 w-5" />
                     <span>Notifications</span>
                   </div>
-                  {unreadCount > 0 && (
+                  {notifications.filter(n => n.jobId !== null && !n.read).length > 0 && (
                     <Badge variant="destructive" className="text-xs">
                       {unreadCount}
                     </Badge>
@@ -344,8 +370,14 @@ const Dashboard: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {notifications.length > 0 ? (
-                  notifications.map((notification, index) => {
+                {notificationLoading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <LoadingSpinner size="sm" />
+                  </div>
+                ) : notifications.length > 0 ? (
+                  notifications
+  .filter((notification) => notification.jobId !== null)
+  .map((notification, index) => {
                     // Determine type icon and colors
                     const typeConfig = {
                       'job-match': { icon: Briefcase, bg: 'bg-blue-100', text: 'text-blue-600' },
@@ -355,8 +387,46 @@ const Dashboard: React.FC = () => {
                       'job-posted': { icon: Briefcase, bg: 'bg-indigo-100', text: 'text-indigo-600' },
                     };
                     
-                    const config = typeConfig[notification.type] || typeConfig['job-match'];
-                    const timeSince = new Date(notification.createdAt).toLocaleDateString();
+                    if (!typeConfig[notification.type]) {
+  console.warn("Unknown notification type:", notification.type);
+}
+
+const config = typeConfig[notification.type] || typeConfig['job-match'];
+const timeSince = new Date(notification.createdAt).toLocaleString();
+
+                    const handleMarkAsRead = async (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      try {
+                        await markAsRead(notification._id);
+                        toast({
+                          title: 'Success',
+                          description: 'Notification marked as read',
+                        });
+                      } catch {
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to mark notification as read',
+                          variant: 'destructive',
+                        });
+                      }
+                    };
+
+                    const handleDelete = async (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      try {
+                        await deleteNotification(notification._id);
+                        toast({
+                          title: 'Success',
+                          description: 'Notification deleted',
+                        });
+                      } catch {
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to delete notification',
+                          variant: 'destructive',
+                        });
+                      }
+                    };
 
                     return (
                       <motion.div
@@ -364,22 +434,35 @@ const Dashboard: React.FC = () => {
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.1 * index }}
-                        className={`p-3 rounded-lg border transition-colors cursor-pointer hover:bg-accent/50 ${
-                          !notification.read ? 'bg-primary/5 border-primary/20' : 'bg-accent/10'
+                        className={`p-3 rounded-lg border transition-all ${
+                          !notification.read 
+                            ? 'bg-primary/5 border-primary/20 hover:bg-primary/10' 
+                            : 'bg-accent/10 hover:bg-accent/20'
                         }`}
                       >
-                        <div className="flex items-start space-x-3">
-                          <div className={`p-1 rounded-full ${config.bg} ${config.text}`}>
-                            <config.icon className="h-3 w-3" />
+                        <div className="flex items-start space-x-3 group">
+                          <div className={`p-2 rounded-full ${config.bg} ${config.text} flex-shrink-0`}>
+                            <config.icon className="h-4 w-4" />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">{notification.title}</p>
-                            <p className="text-xs text-muted-foreground">{notification.description}</p>
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={handleMarkAsRead}>
+                            <p className="text-sm font-medium line-clamp-1">{notification.title}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{notification.description}</p>
                             <p className="text-xs text-muted-foreground mt-1">{timeSince}</p>
                           </div>
-                          {!notification.read && (
-                            <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />
-                          )}
+                          <div className="flex items-center space-x-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {!notification.read && (
+                              <div className="w-2 h-2 bg-primary rounded-full" />
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+                              onClick={handleDelete}
+                              title="Delete notification"
+                            >
+                              <span className="text-xs">✕</span>
+                            </Button>
+                          </div>
                         </div>
                       </motion.div>
                     );

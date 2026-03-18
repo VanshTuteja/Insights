@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Briefcase, Palette, LogOut, Bell, Edit, Menu, User } from 'lucide-react';
 import { useThemeStore } from '@/stores/themeStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useNotificationStore } from '@/stores/notificationStore';
 import ProfileDialog from '@/components/ProfileDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,10 +17,25 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   const { theme, setTheme, themes } = useThemeStore();
   const { user, logout } = useAuthStore();
+  const { unreadCount, fetchNotifications } = useNotificationStore();
   const [profileDialogOpen, setProfileDialogOpen] = React.useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = React.useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = React.useState(false);
-  const [notificationCount] = React.useState(3); // Mock notification count
+
+  // Keep notification badge fresh while navigating across pages.
+  React.useEffect(() => {
+    if (user?.role !== 'jobseeker') {
+      return;
+    }
+
+    fetchNotifications(10, 1);
+
+    const intervalId = setInterval(() => {
+      fetchNotifications(10, 1);
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [fetchNotifications, user?.role]);
 
   // Close dropdowns when clicking outside
   React.useEffect(() => {
@@ -88,12 +104,12 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
             {/* Notifications */}
             <Button variant="ghost" size="sm" className="relative">
               <Bell className="h-5 w-5" />
-              {notificationCount > 0 && (
+              {unreadCount > 0 && (
                 <Badge 
                   variant="destructive" 
                   className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
                 >
-                  {notificationCount}
+                  {unreadCount}
                 </Badge>
               )}
             </Button>

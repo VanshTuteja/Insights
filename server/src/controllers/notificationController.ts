@@ -8,21 +8,90 @@ export async function getNotifications(req: AuthRequest, res: Response) {
     try {
         const userId = req.user?.userId;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const userObjectId = new mongoose.Types.ObjectId(userId);
 
         const { limit = 10, page = 1 } = req.query;
         const skip = ((Number(page) || 1) - 1) * (Number(limit) || 10);
 
-        const notifications = await Notification.find({ userId: new mongoose.Types.ObjectId(userId) })
-            .sort({ createdAt: -1 })
-            .limit(Number(limit) || 10)
-            .skip(skip)
-            .populate('jobId', 'title company');
+        const baseMatch = { userId: userObjectId };
+        const validityMatch = {
+            $or: [
+                { type: { $ne: 'job-match' } },
+                {
+                    $and: [
+                        { type: 'job-match' },
+                        { jobId: { $ne: null } },
+                        { 'jobDoc.0': { $exists: true } },
+                    ],
+                },
+            ],
+        };
 
-        const total = await Notification.countDocuments({ userId: new mongoose.Types.ObjectId(userId) });
-        const unreadCount = await Notification.countDocuments({
-            userId: new mongoose.Types.ObjectId(userId),
-            read: false,
-        });
+        const listPipeline: mongoose.PipelineStage[] = [
+            { $match: baseMatch },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'jobDoc',
+                },
+            },
+            { $match: validityMatch },
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: Number(limit) || 10 },
+            {
+                $addFields: {
+                    jobId: {
+                        $cond: [
+                            { $gt: [{ $size: '$jobDoc' }, 0] },
+                            {
+                                _id: { $arrayElemAt: ['$jobDoc._id', 0] },
+                                title: { $arrayElemAt: ['$jobDoc.title', 0] },
+                                company: { $arrayElemAt: ['$jobDoc.company', 0] },
+                            },
+                            null,
+                        ],
+                    },
+                },
+            },
+            { $project: { jobDoc: 0 } },
+        ];
+
+        const notifications = await Notification.aggregate(listPipeline);
+
+        const [totalResult, unreadResult] = await Promise.all([
+            Notification.aggregate([
+                { $match: baseMatch },
+                {
+                    $lookup: {
+                        from: 'jobs',
+                        localField: 'jobId',
+                        foreignField: '_id',
+                        as: 'jobDoc',
+                    },
+                },
+                { $match: validityMatch },
+                { $count: 'count' },
+            ]),
+            Notification.aggregate([
+                { $match: { ...baseMatch, read: false } },
+                {
+                    $lookup: {
+                        from: 'jobs',
+                        localField: 'jobId',
+                        foreignField: '_id',
+                        as: 'jobDoc',
+                    },
+                },
+                { $match: validityMatch },
+                { $count: 'count' },
+            ]),
+        ]);
+
+        const total = totalResult[0]?.count || 0;
+        const unreadCount = unreadResult[0]?.count || 0;
 
         return res.json({
             success: true,
@@ -105,6 +174,11 @@ export async function createNotificationForUsers(
     jobId?: mongoose.Types.ObjectId
 ) {
     try {
+        if (type === 'job-match' && !jobId) {
+            logger.warn('Skipped creating job-match notifications without jobId');
+            return;
+        }
+
         const notificationDocs = userIds.map(userId => ({
             userId,
             type,

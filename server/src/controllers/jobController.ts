@@ -5,6 +5,38 @@ import User from '../models/Users';
 import Application from '../models/Application';
 import { createNotificationForUsers } from './notificationController';
 import { AuthRequest, ApiResponse } from '../types';
+import logger from '../utils/logger';
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function parseSalaryUpperBound(value: string): number | null {
+  const normalized = value.toLowerCase().replace(/,/g, '');
+  const matches = normalized.match(/\d+(?:\.\d+)?\s*[kmb]?/g);
+  if (!matches || matches.length === 0) return null;
+
+  const parsed = matches
+    .map((part) => {
+      const trimmed = part.trim();
+      const suffix = trimmed.slice(-1);
+      const numeric = Number(trimmed.replace(/[kmb]$/i, ''));
+      if (Number.isNaN(numeric)) return null;
+
+      if (suffix === 'k') return numeric * 1_000;
+      if (suffix === 'm') return numeric * 1_000_000;
+      if (suffix === 'b') return numeric * 1_000_000_000;
+      return numeric;
+    })
+    .filter((n): n is number => n !== null);
+
+  if (parsed.length === 0) return null;
+  return Math.max(...parsed);
+}
+
+function hasConfiguredPreference(values?: string[]): boolean {
+  return Array.isArray(values) && values.map((v) => String(v).trim()).filter(Boolean).length > 0;
+}
 
 export const getJobs = async (req: Request, res: Response) => {
   try {
@@ -141,22 +173,98 @@ export const createJob = async (req: AuthRequest, res: Response) => {
       .populate('employerId', 'name company');
 
     // Create notifications for candidate matches
-    if (job.tags && job.tags.length > 0) {
+    {
+      const normalizedTags = (job.tags || [])
+        .map((tag) => String(tag).trim().toLowerCase())
+        .filter(Boolean);
+
       const candidates = await User.find({
         role: 'jobseeker',
-        skills: { $in: job.tags },
-        _id: { $ne: req.user?.userId } // Don't notify the employer
-      });
+        _id: { $ne: req.user?.userId },
+        'preferences.notifications.jobAlerts': { $ne: false },
+      }).select('_id skills preferences');
+      console.log("Total Candidates:", candidates.length);
 
-      if (candidates.length > 0) {
-        const candidateIds = candidates.map(c => new mongoose.Types.ObjectId(c._id));
+      const normalizedJobLocation = normalizeText(job.location || '');
+      const normalizedJobType = normalizeText(job.type || '');
+      const searchableJobText = normalizeText(
+        `${job.title || ''} ${job.company || ''} ${job.description || ''} ${job.requirements || ''}`
+      );
+      const jobSalaryUpper = parseSalaryUpperBound(job.salary || '');
+
+      const matchedCandidates = candidates.filter((candidate) => {
+        const candidateSkills = (candidate.skills || [])
+          .map((skill) => normalizeText(String(skill)))
+          .filter(Boolean);
+
+        const skillsMatch =
+          normalizedTags.length === 0
+            ? true
+            : candidateSkills.length > 0 &&
+            candidateSkills.some((skill) =>
+              normalizedTags.some((tag) =>
+                skill.includes(tag) || tag.includes(skill)
+              )
+            );
+
+        const jobTypes = (candidate.preferences?.jobTypes || [])
+          .map((value) => normalizeText(String(value)))
+          .filter(Boolean);
+        const locations = (candidate.preferences?.locations || [])
+          .map((value) => normalizeText(String(value)))
+          .filter(Boolean);
+        const industries = (candidate.preferences?.industries || [])
+          .map((value) => normalizeText(String(value)))
+          .filter(Boolean);
+        const salaryRange = candidate.preferences?.salaryRange || [];
+
+        const typeConfigured = hasConfiguredPreference(jobTypes);
+        const locationConfigured = hasConfiguredPreference(locations);
+        const industryConfigured = hasConfiguredPreference(industries);
+        const salaryConfigured = Array.isArray(salaryRange) && salaryRange.length === 2;
+
+        const typeMatch = !typeConfigured || jobTypes.includes(normalizedJobType);
+        const locationMatch =
+          !locationConfigured ||
+          locations.some((locationPref) =>
+            normalizedJobLocation.includes(locationPref) || locationPref.includes(normalizedJobLocation)
+          );
+        const industryMatch =
+          !industryConfigured ||
+          industries.some((industryPref) => searchableJobText.includes(industryPref));
+        const salaryMatch =
+          !salaryConfigured ||
+          jobSalaryUpper === null ||
+          jobSalaryUpper >= Number(salaryRange[0] || 0);
+
+        const configuredPreferenceCount = [typeConfigured, locationConfigured, industryConfigured, salaryConfigured]
+          .filter(Boolean)
+          .length;
+        const matchedPreferenceCount = [
+          typeConfigured && typeMatch,
+          locationConfigured && locationMatch,
+          industryConfigured && industryMatch,
+          salaryConfigured && salaryMatch,
+        ].filter(Boolean).length;
+        const preferencesMatch =
+          configuredPreferenceCount > 0
+            ? matchedPreferenceCount > 0
+            : true;
+
+        return preferencesMatch && skillsMatch;
+      });
+      console.log("Matched Candidates:", matchedCandidates.length);
+
+      if (matchedCandidates.length > 0) {
+        const candidateIds = matchedCandidates.map((candidate) => candidate._id as mongoose.Types.ObjectId);
         await createNotificationForUsers(
           candidateIds,
           'job-match',
           `New job match: ${job.title}`,
-          `${job.company} is hiring for ${job.title} position. Your skills match this role!`,
+          `${job.company} is hiring for ${job.title}. This role matches your profile preferences.`,
           job._id
         );
+        logger.info(`Job "${job.title}" created. Matched ${matchedCandidates.length} candidates.`);
       }
     }
 
