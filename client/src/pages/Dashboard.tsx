@@ -10,6 +10,7 @@ import JobCard from '@/components/JobCard';
 import JobDetailsDialog from '@/components/JobDetailsDialog';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { useAuthStore } from '@/stores/authStore';
+import { useNotificationStore } from '@/stores/notificationStore';
 import { toast } from '@/hooks/use-toast';
 import { 
   Search, 
@@ -32,11 +33,24 @@ const Dashboard: React.FC = () => {
   const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
   const { user } = useAuthStore();
+  const { notifications, unreadCount, fetchNotifications } = useNotificationStore();
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Fetch notifications on component mount
+  useEffect(() => {
+    fetchNotifications(10, 1);
+
+    // Set up polling interval (check for new notifications every 30 seconds)
+    const pollInterval = setInterval(() => {
+      fetchNotifications(10, 1);
+    }, 30000);
+
+    return () => clearInterval(pollInterval);
+  }, [fetchNotifications]);
 
   const stats = [
     { label: 'Jobs Available', value: '2,847', icon: Briefcase, color: 'from-blue-500 to-blue-600', change: '+12%' },
@@ -102,33 +116,6 @@ const Dashboard: React.FC = () => {
     { title: 'Profile Completeness', progress: 85, target: 100 },
     { title: 'Skill Assessments', progress: 3, target: 5 },
     { title: 'Interview Practice', progress: 7, target: 10 },
-  ];
-
-  const notifications = [
-    {
-      id: '1',
-      title: 'New job match found',
-      description: 'Senior React Developer at TechCorp',
-      time: '5 min ago',
-      type: 'job',
-      unread: true,
-    },
-    {
-      id: '2',
-      title: 'Interview scheduled',
-      description: 'Technical interview tomorrow at 2 PM',
-      time: '1 hour ago',
-      type: 'interview',
-      unread: true,
-    },
-    {
-      id: '3',
-      title: 'Profile viewed',
-      description: 'Your profile was viewed by StartupLabs',
-      time: '3 hours ago',
-      type: 'profile',
-      unread: false,
-    },
   ];
 
   const quickActions = [
@@ -349,43 +336,63 @@ const Dashboard: React.FC = () => {
                     <Bell className="h-5 w-5" />
                     <span>Notifications</span>
                   </div>
-                  <Badge variant="destructive" className="text-xs">
-                    {notifications.filter(n => n.unread).length}
-                  </Badge>
+                  {unreadCount > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {unreadCount}
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {notifications.map((notification, index) => (
-                  <motion.div
-                    key={notification.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 * index }}
-                    className={`p-3 rounded-lg border transition-colors cursor-pointer hover:bg-accent/50 ${
-                      notification.unread ? 'bg-primary/5 border-primary/20' : 'bg-accent/10'
-                    }`}
-                  >
-                    <div className="flex items-start space-x-3">
-                      <div className={`p-1 rounded-full ${
-                        notification.type === 'job' ? 'bg-blue-100 text-blue-600' :
-                        notification.type === 'interview' ? 'bg-green-100 text-green-600' :
-                        'bg-purple-100 text-purple-600'
-                      }`}>
-                        {notification.type === 'job' ? <Briefcase className="h-3 w-3" /> :
-                         notification.type === 'interview' ? <Calendar className="h-3 w-3" /> :
-                         <Users className="h-3 w-3" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{notification.title}</p>
-                        <p className="text-xs text-muted-foreground">{notification.description}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{notification.time}</p>
-                      </div>
-                      {notification.unread && (
-                        <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />
-                      )}
-                    </div>
-                  </motion.div>
-                ))}
+                {notifications.length > 0 ? (
+                  notifications.map((notification, index) => {
+                    // Determine type icon and colors
+                    const typeConfig = {
+                      'job-match': { icon: Briefcase, bg: 'bg-blue-100', text: 'text-blue-600' },
+                      'interview-scheduled': { icon: Calendar, bg: 'bg-green-100', text: 'text-green-600' },
+                      'profile-viewed': { icon: Users, bg: 'bg-purple-100', text: 'text-purple-600' },
+                      'application-update': { icon: FileText, bg: 'bg-yellow-100', text: 'text-yellow-600' },
+                      'job-posted': { icon: Briefcase, bg: 'bg-indigo-100', text: 'text-indigo-600' },
+                    };
+                    
+                    const config = typeConfig[notification.type] || typeConfig['job-match'];
+                    const timeSince = new Date(notification.createdAt).toLocaleDateString();
+
+                    return (
+                      <motion.div
+                        key={notification._id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 * index }}
+                        className={`p-3 rounded-lg border transition-colors cursor-pointer hover:bg-accent/50 ${
+                          !notification.read ? 'bg-primary/5 border-primary/20' : 'bg-accent/10'
+                        }`}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className={`p-1 rounded-full ${config.bg} ${config.text}`}>
+                            <config.icon className="h-3 w-3" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{notification.title}</p>
+                            <p className="text-xs text-muted-foreground">{notification.description}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{timeSince}</p>
+                          </div>
+                          {!notification.read && (
+                            <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                ) : (
+                  <div className="py-8 text-center">
+                    <Bell className="h-12 w-12 text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No notifications yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      We'll notify you when new job matches are found
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </AnimatedSection>

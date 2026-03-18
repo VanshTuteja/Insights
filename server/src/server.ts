@@ -14,6 +14,7 @@ import interviewRoutes from './routes/interview';
 import applicationRoutes from './routes/application';
 import interviewsRoutes from './routes/interviews';
 import uploadRoutes from './routes/upload';
+import notificationRoutes from './routes/notification';
 
 const app = express();
 
@@ -47,14 +48,15 @@ app.use('/api/interview', interviewRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/interviews', interviewsRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
   try {
     const dbHealth = await dbConnection.healthCheck();
-    
-    res.json({ 
-      status: 'OK', 
+
+    res.json({
+      status: 'OK',
       timestamp: new Date().toISOString(),
       environment: config.nodeEnv,
       database: dbHealth,
@@ -71,16 +73,16 @@ app.get('/api/health', async (req, res) => {
 // Error handling middleware
 app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.error(`Server error: ${error.message}`);
-  
+
   if (error.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ 
-      error: 'File too large. Maximum size is 100MB.' 
+    return res.status(400).json({
+      error: 'File too large. Maximum size is 100MB.'
     });
   }
-  
+
   if (error.code === 'LIMIT_UNEXPECTED_FILE') {
-    return res.status(400).json({ 
-      error: 'Unexpected file field.' 
+    return res.status(400).json({
+      error: 'Unexpected file field.'
     });
   }
 
@@ -96,19 +98,19 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
       error: 'Invalid ID format'
     });
   }
-  
-  return res.status(500).json({ 
-    error: config.nodeEnv === 'development' ? error.message : 'Internal server error' 
+
+  return res.status(500).json({
+    error: config.nodeEnv === 'development' ? error.message : 'Internal server error'
   });
 });
 
 
 app.use('/uploads', express.static(path.join(DIRNAME, 'uploads')));
-app.use(express.static(path.join(DIRNAME,"/client/dist")));
+app.use(express.static(path.join(DIRNAME, "/client/dist")));
 
 // 404 handler
-app.use("*",(_,res) => {
-    res.sendFile(path.resolve(DIRNAME, "client","dist","index.html"));
+app.use("*", (_, res) => {
+  res.sendFile(path.resolve(DIRNAME, "client", "dist", "index.html"));
 });
 
 // Initialize database and start server
@@ -116,7 +118,7 @@ async function startServer() {
   try {
     // Connect to MongoDB
     await dbConnection.connect();
-    
+
     // Start server
     app.listen(config.port, () => {
       logger.info(`Server running on port ${config.port} in ${config.nodeEnv} mode`);

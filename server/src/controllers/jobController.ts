@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Job from '../models/Job';
 import User from '../models/Users';
 import Application from '../models/Application';
+import { createNotificationForUsers } from './notificationController';
 import { AuthRequest, ApiResponse } from '../types';
 
 export const getJobs = async (req: Request, res: Response) => {
@@ -137,6 +139,26 @@ export const createJob = async (req: AuthRequest, res: Response) => {
 
     const populatedJob = await Job.findById(job._id)
       .populate('employerId', 'name company');
+
+    // Create notifications for candidate matches
+    if (job.tags && job.tags.length > 0) {
+      const candidates = await User.find({
+        role: 'jobseeker',
+        skills: { $in: job.tags },
+        _id: { $ne: req.user?.userId } // Don't notify the employer
+      });
+
+      if (candidates.length > 0) {
+        const candidateIds = candidates.map(c => new mongoose.Types.ObjectId(c._id));
+        await createNotificationForUsers(
+          candidateIds,
+          'job-match',
+          `New job match: ${job.title}`,
+          `${job.company} is hiring for ${job.title} position. Your skills match this role!`,
+          job._id
+        );
+      }
+    }
 
     res.status(201).json({
       success: true,
