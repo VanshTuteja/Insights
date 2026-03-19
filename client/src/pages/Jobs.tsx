@@ -14,6 +14,7 @@ import { Search, MapPin, Briefcase } from 'lucide-react';
 import axios from 'axios';
 import { useAuthStore } from '@/stores/authStore';
 import { getMissingProfileFields } from '@/lib/profileCompletion';
+import { useJobStore } from '@/stores/jobStore';
 import { useNavigate } from 'react-router-dom';
 
 const Jobs: React.FC = () => {
@@ -26,8 +27,8 @@ const Jobs: React.FC = () => {
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
   const [savedJobIds, setSavedJobIds] = useState<string[]>([]);
-  const [jobs, setJobs] = useState<any[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<any[]>([]);
+  const { jobs, fetchJobs } = useJobStore();
 
   const popularSearches = [
     'Frontend Developer',
@@ -57,7 +58,21 @@ const Jobs: React.FC = () => {
 
   useEffect(() => {
     // Client-side filtering for salary range
-    let filtered = jobs;
+    let filtered = jobs.map((job: any) => ({
+      id: String(job._id || job.id),
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      salary: job.salary,
+      type: job.type,
+      tags: job.tags || [],
+      description: job.description,
+      postedTime: new Date(job.createdAt || Date.now()).toLocaleDateString(),
+      raw: {
+        requirements: job.requirements,
+        benefits: job.benefits,
+      },
+    }));
 
     if (searchQuery) {
       filtered = filtered.filter((job) =>
@@ -104,26 +119,8 @@ const Jobs: React.FC = () => {
       if (locationFilter) params.location = locationFilter;
       if (salaryFilter) params.salary = salaryFilter;
 
-      const response = await axios.get('/jobs', { params });
-      const apiJobs = response.data?.data?.jobs || [];
-
-      const mapped = apiJobs.map((job: any) => ({
-        id: String(job._id),
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        salary: job.salary,
-        type: job.type,
-        tags: job.tags || [],
-        description: job.description,
-        postedTime: new Date(job.createdAt).toLocaleDateString(),
-        raw: {
-          requirements: job.requirements,
-          benefits: job.benefits,
-        },
-      }));
-
-      setJobs(mapped);
+      const storeFilters = params as Record<string, any>;
+      await fetchJobs(storeFilters);
     } catch (error: any) {
       toast({
         title: 'Failed to load jobs',

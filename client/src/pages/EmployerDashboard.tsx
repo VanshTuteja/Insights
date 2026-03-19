@@ -33,6 +33,9 @@ import {
 import { toast } from '@/hooks/use-toast';
 import axios from 'axios';
 import { useAuthStore } from '@/stores/authStore';
+import { useJobStore } from '@/stores/jobStore';
+import { cn } from '@/lib/utils';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
@@ -48,6 +51,9 @@ import {
 } from 'lucide-react';
 
 const EmployerDashboard: React.FC = () => {
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
   const navigate = useNavigate();
   const [createJobOpen, setCreateJobOpen] = useState(false);
   const [editJobOpen, setEditJobOpen] = useState(false);
@@ -72,6 +78,20 @@ const EmployerDashboard: React.FC = () => {
   const [selectedApplicantsJob, setSelectedApplicantsJob] = useState<any>(null);
   const [jobApplicants, setJobApplicants] = useState<any[]>([]);
   const { user } = useAuthStore();
+  const refreshPublicJobs = useJobStore((state) => state.fetchJobs);
+  const pageShellStyle = {
+    backgroundImage: darkTheme
+      ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.22), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.16), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.94) 100%)'
+      : 'radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.18), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.72) 52%, hsl(var(--background)) 100%)',
+  };
+  const heroClass = cn(
+    'rounded-3xl border px-6 py-8 shadow-premium-lg backdrop-blur-xl',
+    darkTheme ? 'border-primary/20 bg-card/80 text-card-foreground' : 'border-primary/10 bg-card/90 text-card-foreground',
+  );
+  const cardClass = cn(
+    'border shadow-premium-lg backdrop-blur',
+    darkTheme ? 'border-primary/15 bg-card/80' : 'border-border/80 bg-card/95',
+  );
 
   const loadData = useCallback(async () => {
     try {
@@ -199,6 +219,7 @@ const EmployerDashboard: React.FC = () => {
       title: 'Job posted successfully',
       description: 'Your job posting is now live and visible to candidates.',
     });
+    void refreshPublicJobs({ limit: 12 });
   };
 
   const handleJobUpdated = (updatedJob: any) => {
@@ -212,6 +233,8 @@ const EmployerDashboard: React.FC = () => {
       title: 'Job updated successfully',
       description: 'Your job posting has been updated.',
     });
+    void loadData();
+    void refreshPublicJobs({ limit: 12 });
   };
 
   const handleEditJob = (job: any) => {
@@ -233,6 +256,7 @@ const EmployerDashboard: React.FC = () => {
           title: 'Job deleted',
           description: 'The job posting has been removed.',
         });
+        void refreshPublicJobs({ limit: 12 });
       } catch (error: any) {
         toast({
           title: 'Failed to delete job',
@@ -357,25 +381,28 @@ const EmployerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={pageShellStyle}>
       <AnimatedSection>
-        <div className="rounded-3xl border bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,41,59,0.94))] px-6 py-8 text-white shadow-xl">
+        <div className={heroClass}>
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.25em] text-white/55">Hiring Command Center</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Hiring Command Center</p>
               <h1 className="text-3xl font-semibold">Dashboard</h1>
-              <p className="max-w-2xl text-sm text-white/70">
+              <p className="max-w-2xl text-sm text-muted-foreground">
                 Manage job posts, review applicants, schedule interviews, and monitor hiring performance from one place.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Theme: <span className="font-medium text-foreground">{themePreview.label}</span>
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={() => navigate('/insights')}>
+              <Button variant="outline" className={cn(darkTheme ? 'border-primary/20 bg-background/40' : 'border-border bg-background/80')} onClick={() => navigate('/insights')}>
                 <ArrowRight className="mr-2 h-4 w-4" />
                 Open Career Insights
               </Button>
               <Button 
                 onClick={() => setCreateJobOpen(true)}
-                className="bg-white text-slate-950 hover:bg-slate-100"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Post New Job
@@ -396,11 +423,11 @@ const EmployerDashboard: React.FC = () => {
               transition={{ delay: 0.1 * index }}
               whileHover={{ scale: 1.05 }}
             >
-              <Card className="border-0 shadow-lg">
+              <Card className={cardClass}>
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-4">
-                    <div className={`p-3 rounded-full bg-gradient-to-br ${stat.color}`}>
-                      <stat.icon className="h-6 w-6 text-white" />
+                    <div className={cn('p-3 rounded-full', darkTheme ? 'bg-primary/18' : 'bg-primary/10')}>
+                      <stat.icon className="h-6 w-6 text-primary" />
                     </div>
                     <div>
                       <p className="text-2xl font-bold">{stat.value}</p>
@@ -427,7 +454,7 @@ const EmployerDashboard: React.FC = () => {
               </TabsList>
 
               <TabsContent value="active" className="space-y-4">
-                <Card>
+                <Card className={cardClass}>
                   <CardHeader>
                     <CardTitle>Your Job Postings</CardTitle>
                     <CardDescription>Manage your active job listings</CardDescription>
@@ -440,7 +467,7 @@ const EmployerDashboard: React.FC = () => {
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 * index }}
-                          className="p-4 border rounded-lg hover:shadow-md transition-shadow"
+                          className={cn('p-4 border rounded-lg hover:shadow-md transition-shadow', darkTheme ? 'border-border/70 bg-background/45' : 'border-border bg-background')}
                         >
                           <div className="flex justify-between items-start">
                             <div className="space-y-2">
@@ -502,7 +529,7 @@ const EmployerDashboard: React.FC = () => {
                   </p>
                   <Button 
                     onClick={() => setCreateJobOpen(true)}
-                    className="bg-gradient-to-r from-primary to-secondary"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Create Job Posting
@@ -525,7 +552,7 @@ const EmployerDashboard: React.FC = () => {
 
         {/* Recent Applications */}
         <AnimatedSection delay={0.4}>
-          <Card>
+          <Card className={cardClass}>
             <CardHeader>
               <CardTitle>Recent Applications</CardTitle>
               <CardDescription>Latest candidates who applied</CardDescription>
@@ -539,7 +566,7 @@ const EmployerDashboard: React.FC = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 * index }}
                     whileHover={{ scale: 1.02 }}
-                    className="p-4 border rounded-lg cursor-pointer hover:shadow-md transition-shadow"
+                    className={cn('p-4 border rounded-lg cursor-pointer hover:shadow-md transition-shadow', darkTheme ? 'border-border/70 bg-background/45' : 'border-border bg-background')}
                   >
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">

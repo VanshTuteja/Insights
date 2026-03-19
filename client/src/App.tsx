@@ -87,7 +87,7 @@ const AppRoutes: React.FC = () => {
           path="employer"
           element={isEmployer ? <EmployerDashboard /> : <Navigate to="/" replace />}
         />
-        <Route path="messaging" element={<Messaging />} />
+        {/* <Route path="messaging" element={<Messaging />} /> */}
         <Route path="profile" element={<Profile />} />
         <Route path="settings" element={<Settings />} />
         <Route path="help" element={<HelpSupport />} />

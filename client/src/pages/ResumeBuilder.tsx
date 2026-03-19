@@ -33,6 +33,8 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 
 type ExperienceItem = {
   id: string;
@@ -918,6 +920,9 @@ const ResumeBuilder = () => {
   const [newTool, setNewTool] = useState('');
   const [exportLoading, setExportLoading] = useState<'pdf' | 'docx' | null>(null);
   const blueprint = ROLE_BLUEPRINTS[selectedRole];
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1240,38 +1245,76 @@ const ResumeBuilder = () => {
       ? 'text-stone-900 border-stone-300'
       : 'text-white border-slate-700';
 
+  const pageShellStyle = {
+    backgroundImage: darkTheme
+      ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.24), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.18), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.92) 100%)'
+      : 'radial-gradient(circle at top left, hsl(var(--primary) / 0.14), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.22), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.72) 52%, hsl(var(--background)) 100%)',
+  };
+
+  const heroCardClass = cn(
+    'overflow-hidden border shadow-premium-lg backdrop-blur-xl',
+    darkTheme ? 'bg-card/80 text-card-foreground border-primary/20' : 'bg-card/90 text-card-foreground border-primary/10',
+  );
+
+  const mainCardClass = cn(
+    'border shadow-premium-lg backdrop-blur',
+    darkTheme ? 'bg-card/80 border-primary/10' : 'bg-card/95 border-border/80',
+  );
+
+  const nestedCardClass = cn(
+    'border shadow-sm',
+    darkTheme ? 'bg-background/50 border-border/70' : 'bg-background border-border/80',
+  );
+
+  const metricCardClass = cn(
+    'rounded-2xl border p-4',
+    darkTheme ? 'border-primary/20 bg-background/50 backdrop-blur' : 'border-primary/10 bg-background/75',
+  );
+
+  const subtlePanelClass = cn(
+    'rounded-2xl border p-3 text-sm',
+    darkTheme ? 'border-border/70 bg-background/50 text-foreground/80' : 'border-border bg-muted/60 text-foreground/80',
+  );
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(14,165,233,0.12),_transparent_24%),linear-gradient(180deg,_#07111f_0%,_#0f172a_42%,_#e5eef7_42%,_#f8fafc_100%)] px-4 py-6 md:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="relative min-h-screen overflow-hidden bg-background px-4 py-6 md:px-6 lg:px-8" style={pageShellStyle}>
+      <div className="pointer-events-none absolute inset-0">
+        <div className={cn('absolute left-[-6rem] top-[-5rem] h-48 w-48 rounded-full blur-3xl', darkTheme ? 'bg-primary/20' : 'bg-primary/10')} />
+        <div className={cn('absolute right-[-4rem] top-16 h-56 w-56 rounded-full blur-3xl', darkTheme ? 'bg-accent/20' : 'bg-accent/25')} />
+      </div>
+
+      <div className="relative mx-auto max-w-7xl space-y-6">
         <AnimatedSection>
-          <Card className="overflow-hidden border-0 bg-slate-950/70 text-white shadow-2xl backdrop-blur">
+          <Card className={heroCardClass}>
             <CardContent className="grid gap-6 p-6 lg:grid-cols-[1.35fr_0.9fr] lg:p-8">
               <div className="space-y-4">
-                <Badge className="w-fit border border-emerald-400/30 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/10">
-                  ATS-first resume builder
-                </Badge>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="w-fit border border-primary/25 bg-primary/10 text-primary hover:bg-primary/10">
+                    ATS-first resume builder
+                  </Badge>
+                  <Badge variant="outline" className="border-border/70 bg-background/40 text-foreground/80">
+                    Theme synced: {themePreview.label}
+                  </Badge>
+                </div>
                 <div className="space-y-3">
                   <h1 className="max-w-3xl text-3xl font-semibold tracking-tight md:text-5xl">
                     Build a professional resume that is role-specific, export-ready, and recruiter-friendly.
                   </h1>
-                  <p className="max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
+                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
                     This version gives you a complete starter resume, profile-specific improvements, better ATS guidance,
                     and direct downloads for both PDF and Word.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <Button
-                    className="bg-emerald-500 text-slate-950 hover:bg-emerald-400"
-                    onClick={() => applyRoleStarter(false)}
-                  >
+                  <Button className="shadow-premium" onClick={() => applyRoleStarter(false)}>
                     <Sparkles className="mr-2 h-4 w-4" />
                     Apply role starter
                   </Button>
-                  <Button variant="outline" className="border-slate-700 bg-white/5 text-white hover:bg-white/10" onClick={autoImprove}>
+                  <Button variant="outline" className="border-primary/20 bg-background/30 hover:bg-accent/80" onClick={autoImprove}>
                     <Wand2 className="mr-2 h-4 w-4" />
                     Auto improve content
                   </Button>
-                  <Button variant="outline" className="border-slate-700 bg-white/5 text-white hover:bg-white/10" onClick={resetDraft}>
+                  <Button variant="outline" className="border-primary/20 bg-background/30 hover:bg-accent/80" onClick={resetDraft}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Reset draft
                   </Button>
@@ -1284,10 +1327,10 @@ const ResumeBuilder = () => {
                   { label: 'Profile completion', value: `${completion}%`, hint: completion >= 85 ? 'Ready to export' : 'Add more detail' },
                   { label: 'Matched keywords', value: `${ats.matchedKeywords.length}`, hint: blueprint.label },
                 ].map((metric) => (
-                  <div key={metric.label} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{metric.label}</p>
+                  <div key={metric.label} className={metricCardClass}>
+                    <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{metric.label}</p>
                     <p className="mt-3 text-3xl font-semibold">{metric.value}</p>
-                    <p className="mt-1 text-sm text-slate-300">{metric.hint}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{metric.hint}</p>
                   </div>
                 ))}
               </div>
@@ -1295,20 +1338,20 @@ const ResumeBuilder = () => {
           </Card>
         </AnimatedSection>
 
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="grid gap-6">
           <AnimatedSection delay={0.05}>
-            <Card className="border-slate-200/80 bg-white/95 shadow-xl">
+            <Card className={mainCardClass}>
               <CardHeader className="space-y-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div>
-                    <CardTitle className="text-2xl text-slate-900">Resume workspace</CardTitle>
-                    <CardDescription className="mt-1 max-w-2xl text-slate-600">
+                    <CardTitle className="text-2xl">Resume workspace</CardTitle>
+                    <CardDescription className="mt-1 max-w-2xl">
                       Pick a target profile, refine the draft, and keep the content sharply aligned with the role you want.
                     </CardDescription>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Target profile</p>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Target profile</p>
                       <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as RoleKey)}>
                         <SelectTrigger className="w-full min-w-[220px]">
                           <SelectValue />
@@ -1323,7 +1366,7 @@ const ResumeBuilder = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Preview style</p>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Preview style</p>
                       <Select value={template} onValueChange={(value) => setTemplate(value as TemplateId)}>
                         <SelectTrigger className="w-full min-w-[180px]">
                           <SelectValue />
@@ -1339,19 +1382,19 @@ const ResumeBuilder = () => {
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <Button variant="outline" className="justify-start" onClick={() => applyRoleStarter(false)}>
+                  <Button variant="outline" className="justify-start border-primary/20 bg-background/40 hover:bg-accent/80" onClick={() => applyRoleStarter(false)}>
                     <Target className="mr-2 h-4 w-4" />
                     Fill missing profile data
                   </Button>
-                  <Button variant="outline" className="justify-start" onClick={() => applyRoleStarter(true)}>
+                  <Button variant="outline" className="justify-start border-primary/20 bg-background/40 hover:bg-accent/80" onClick={() => applyRoleStarter(true)}>
                     <FileText className="mr-2 h-4 w-4" />
                     Load full profile sample
                   </Button>
-                  <Button variant="outline" className="justify-start" onClick={() => handleExport('pdf')} disabled={exportLoading !== null}>
+                  <Button variant="outline" className="justify-start border-primary/20 bg-background/40 hover:bg-accent/80" onClick={() => handleExport('pdf')} disabled={exportLoading !== null}>
                     {exportLoading === 'pdf' ? <LoadingSpinner size="sm" className="mr-2" /> : <Download className="mr-2 h-4 w-4" />}
                     Download PDF
                   </Button>
-                  <Button variant="outline" className="justify-start" onClick={() => handleExport('docx')} disabled={exportLoading !== null}>
+                  <Button variant="outline" className="justify-start border-primary/20 bg-background/40 hover:bg-accent/80" onClick={() => handleExport('docx')} disabled={exportLoading !== null}>
                     {exportLoading === 'docx' ? <LoadingSpinner size="sm" className="mr-2" /> : <Download className="mr-2 h-4 w-4" />}
                     Download Word
                   </Button>
@@ -1360,7 +1403,7 @@ const ResumeBuilder = () => {
 
               <CardContent>
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-4 bg-muted/70">
                     <TabsTrigger value="profile">Profile</TabsTrigger>
                     <TabsTrigger value="experience">Experience</TabsTrigger>
                     <TabsTrigger value="projects">Projects</TabsTrigger>
@@ -1369,37 +1412,37 @@ const ResumeBuilder = () => {
                   <TabsContent value="profile" className="mt-6 space-y-6">
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Full name</label>
+                        <label className="text-sm font-medium text-foreground/80">Full name</label>
                         <Input value={resume.personal.name} onChange={(event) => updatePersonal('name', event.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Headline</label>
+                        <label className="text-sm font-medium text-foreground/80">Headline</label>
                         <Input value={resume.personal.headline} onChange={(event) => updatePersonal('headline', event.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Email</label>
+                        <label className="text-sm font-medium text-foreground/80">Email</label>
                         <Input value={resume.personal.email} onChange={(event) => updatePersonal('email', event.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Phone</label>
+                        <label className="text-sm font-medium text-foreground/80">Phone</label>
                         <Input value={resume.personal.phone} onChange={(event) => updatePersonal('phone', event.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Location</label>
+                        <label className="text-sm font-medium text-foreground/80">Location</label>
                         <Input value={resume.personal.location} onChange={(event) => updatePersonal('location', event.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">LinkedIn</label>
+                        <label className="text-sm font-medium text-foreground/80">LinkedIn</label>
                         <Input value={resume.personal.linkedin} onChange={(event) => updatePersonal('linkedin', event.target.value)} />
                       </div>
                       <div className="space-y-2 md:col-span-2">
-                        <label className="text-sm font-medium text-slate-700">Portfolio or GitHub</label>
+                        <label className="text-sm font-medium text-foreground/80">Portfolio or GitHub</label>
                         <Input value={resume.personal.portfolio} onChange={(event) => updatePersonal('portfolio', event.target.value)} />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Professional summary</label>
+                      <label className="text-sm font-medium text-foreground/80">Professional summary</label>
                       <Textarea
                         rows={5}
                         value={resume.summary}
@@ -1408,7 +1451,7 @@ const ResumeBuilder = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Target job description or required skills</label>
+                      <label className="text-sm font-medium text-foreground/80">Target job description or required skills</label>
                       <Textarea
                         rows={6}
                         placeholder="Paste a job description here so the builder can sharpen keyword coverage and profile alignment."
@@ -1421,8 +1464,8 @@ const ResumeBuilder = () => {
                   <TabsContent value="experience" className="mt-6 space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-900">Professional experience</h3>
-                        <p className="text-sm text-slate-600">Use action verbs and numbers wherever possible.</p>
+                        <h3 className="text-lg font-semibold text-foreground">Professional experience</h3>
+                        <p className="text-sm text-muted-foreground">Use action verbs and numbers wherever possible.</p>
                       </div>
                       <Button variant="outline" size="sm" onClick={addExperience}>
                         <Plus className="mr-2 h-4 w-4" />
@@ -1431,7 +1474,7 @@ const ResumeBuilder = () => {
                     </div>
 
                     {resume.experience.map((item) => (
-                      <Card key={item.id} className="border-slate-200 shadow-sm">
+                      <Card key={item.id} className={nestedCardClass}>
                         <CardContent className="space-y-4 p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div className="grid flex-1 gap-4 md:grid-cols-2">
@@ -1486,8 +1529,8 @@ const ResumeBuilder = () => {
                   <TabsContent value="projects" className="mt-6 space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-900">Projects</h3>
-                        <p className="text-sm text-slate-600">Projects help freshers and early-career candidates look stronger.</p>
+                        <h3 className="text-lg font-semibold text-foreground">Projects</h3>
+                        <p className="text-sm text-muted-foreground">Projects help freshers and early-career candidates look stronger.</p>
                       </div>
                       <Button variant="outline" size="sm" onClick={addProject}>
                         <Plus className="mr-2 h-4 w-4" />
@@ -1496,7 +1539,7 @@ const ResumeBuilder = () => {
                     </div>
 
                     {resume.projects.map((item) => (
-                      <Card key={item.id} className="border-slate-200 shadow-sm">
+                      <Card key={item.id} className={nestedCardClass}>
                         <CardContent className="space-y-4 p-4">
                           <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
                             <Input placeholder="Project name" value={item.name} onChange={(event) => setResume((current) => ({
@@ -1533,13 +1576,13 @@ const ResumeBuilder = () => {
                   </TabsContent>
                   <TabsContent value="qualifications" className="mt-6 space-y-6">
                     <div className="grid gap-6 lg:grid-cols-2">
-                      <Card className="border-slate-200 shadow-sm">
+                      <Card className={nestedCardClass}>
                         <CardHeader>
                           <CardTitle className="text-lg">Skills and tools</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <div className="space-y-3">
-                            <label className="text-sm font-medium text-slate-700">Skills</label>
+                            <label className="text-sm font-medium text-foreground/80">Skills</label>
                             <div className="flex gap-2">
                               <Input
                                 placeholder="Add a skill"
@@ -1583,7 +1626,7 @@ const ResumeBuilder = () => {
                           </div>
 
                           <div className="space-y-3">
-                            <label className="text-sm font-medium text-slate-700">Tools</label>
+                            <label className="text-sm font-medium text-foreground/80">Tools</label>
                             <div className="flex gap-2">
                               <Input
                                 placeholder="Add a tool"
@@ -1627,7 +1670,7 @@ const ResumeBuilder = () => {
                           </div>
 
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-700">Technical stack</label>
+                            <label className="text-sm font-medium text-foreground/80">Technical stack</label>
                             <Textarea
                               rows={4}
                               value={resume.technicalSkills}
@@ -1637,13 +1680,13 @@ const ResumeBuilder = () => {
                         </CardContent>
                       </Card>
 
-                      <Card className="border-slate-200 shadow-sm">
+                      <Card className={nestedCardClass}>
                         <CardHeader>
                           <CardTitle className="text-lg">Achievements and keywords</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-700">Achievements</label>
+                            <label className="text-sm font-medium text-foreground/80">Achievements</label>
                             <Textarea
                               rows={5}
                               value={resume.achievements.join('\n')}
@@ -1651,7 +1694,7 @@ const ResumeBuilder = () => {
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-700">ATS keyword bank</label>
+                            <label className="text-sm font-medium text-foreground/80">ATS keyword bank</label>
                             <Textarea
                               rows={4}
                               value={resume.keywordBlock}
@@ -1663,7 +1706,7 @@ const ResumeBuilder = () => {
                     </div>
 
                     <div className="grid gap-6 lg:grid-cols-2">
-                      <Card className="border-slate-200 shadow-sm">
+                      <Card className={nestedCardClass}>
                         <CardHeader className="flex flex-row items-center justify-between">
                           <div>
                             <CardTitle className="text-lg">Education</CardTitle>
@@ -1704,7 +1747,7 @@ const ResumeBuilder = () => {
                         </CardContent>
                       </Card>
 
-                      <Card className="border-slate-200 shadow-sm">
+                      <Card className={nestedCardClass}>
                         <CardHeader className="flex flex-row items-center justify-between">
                           <div>
                             <CardTitle className="text-lg">Certifications</CardTitle>
@@ -1753,21 +1796,21 @@ const ResumeBuilder = () => {
 
           <div className="space-y-6">
             <AnimatedSection delay={0.1}>
-              <Card className="border-slate-900 bg-slate-950 text-white shadow-xl">
+              <Card className={heroCardClass}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-xl">
-                    <Target className="h-5 w-5 text-emerald-400" />
+                    <Target className="h-5 w-5 text-primary" />
                     ATS scorecard
                   </CardTitle>
-                  <CardDescription className="text-slate-400">
+                  <CardDescription>
                     Live feedback based on structure, keywords, impact, and professional polish.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className={metricCardClass}>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Overall score</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Overall score</p>
                         <p className="mt-2 text-4xl font-semibold">{ats.overall}</p>
                       </div>
                       <Badge className={`${qualityTone.bar} border-0 text-white`}>{qualityTone.label}</Badge>
@@ -1784,29 +1827,29 @@ const ResumeBuilder = () => {
                   ].map(([label, value]) => (
                     <div key={label} className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-300">{label}</span>
-                        <span className="font-medium text-white">{value}%</span>
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="font-medium text-foreground">{value}%</span>
                       </div>
                       <Progress value={Number(value)} className="h-2" />
                     </div>
                   ))}
 
-                  <Separator className="bg-white/10" />
+                  <Separator className="bg-border/80" />
 
                   <div className="space-y-3">
-                    <p className="text-sm font-medium text-white">Profile-specific guidance</p>
+                    <p className="text-sm font-medium text-foreground">Profile-specific guidance</p>
                     <div className="flex flex-wrap gap-2">
                       {ats.matchedKeywords.slice(0, 10).map((keyword) => (
-                        <Badge key={keyword} className="border border-emerald-400/30 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/10">
+                        <Badge key={keyword} className="border border-primary/25 bg-primary/10 text-primary hover:bg-primary/10">
                           {keyword}
                         </Badge>
                       ))}
                       {ats.matchedKeywords.length === 0 && (
-                        <p className="text-sm text-slate-400">Add role-specific keywords and run the auto improve action.</p>
+                        <p className="text-sm text-muted-foreground">Add role-specific keywords and run the auto improve action.</p>
                       )}
                     </div>
                     {ats.missingKeywords.length > 0 && (
-                      <p className="text-sm text-amber-200">
+                      <p className="text-sm text-amber-600 dark:text-amber-300">
                         Missing important keywords: {ats.missingKeywords.slice(0, 6).join(', ')}
                       </p>
                     )}
@@ -1816,16 +1859,16 @@ const ResumeBuilder = () => {
             </AnimatedSection>
 
             <AnimatedSection delay={0.12}>
-              <Card className="border-slate-200 bg-white/95 shadow-xl">
+              <Card className={mainCardClass}>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-xl text-slate-900">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                     Resume improvement plan
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {ats.suggestions.map((suggestion) => (
-                    <div key={suggestion} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                    <div key={suggestion} className={subtlePanelClass}>
                       {suggestion}
                     </div>
                   ))}
@@ -1834,15 +1877,15 @@ const ResumeBuilder = () => {
             </AnimatedSection>
 
             <AnimatedSection delay={0.15}>
-              <Card className="overflow-hidden border-slate-200 bg-white shadow-xl">
+              <Card className={mainCardClass}>
                 <CardHeader>
-                  <CardTitle className="text-xl text-slate-900">Live resume preview</CardTitle>
-                  <CardDescription className="text-slate-600">
+                  <CardTitle className="text-xl">Live resume preview</CardTitle>
+                  <CardDescription>
                     A clean, ATS-safe layout with professional structure and export-friendly content.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[900px] rounded-2xl border border-slate-200 bg-slate-100 p-3">
+                  <ScrollArea className={cn('h-[900px] rounded-2xl border p-3', darkTheme ? 'border-primary/10 bg-background/50' : 'border-border bg-muted/60')}>
                     <motion.div
                       key={`${template}-${selectedRole}-${resume.personal.headline}`}
                       initial={{ opacity: 0, y: 12 }}
@@ -1880,7 +1923,7 @@ const ResumeBuilder = () => {
                                 key={skill}
                                 className={`rounded-full px-3 py-1 text-xs ${
                                   template === 'modern'
-                                    ? 'bg-emerald-400/10 text-emerald-200'
+                                    ? 'bg-primary/10 text-primary'
                                     : template === 'executive'
                                     ? 'bg-slate-100 text-slate-700'
                                     : 'bg-stone-200 text-stone-800'
@@ -1988,36 +2031,36 @@ const ResumeBuilder = () => {
         </div>
 
         <AnimatedSection delay={0.18}>
-          <Card className="border-0 bg-slate-950 text-white shadow-2xl">
+          <Card className={heroCardClass}>
             <CardContent className="grid gap-6 p-6 md:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className={metricCardClass}>
                 <div className="mb-3 flex items-center gap-2">
-                  <Briefcase className="h-5 w-5 text-emerald-400" />
+                  <Briefcase className="h-5 w-5 text-primary" />
                   <h3 className="text-lg font-semibold">Profile-aware content</h3>
                 </div>
-                <p className="text-sm leading-6 text-slate-300">
+                <p className="text-sm leading-6 text-muted-foreground">
                   The builder now changes summaries, keywords, skills, and sample bullets based on the selected profile so
                   the resume looks specific instead of generic.
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className={metricCardClass}>
                 <div className="mb-3 flex items-center gap-2">
-                  <FolderKanban className="h-5 w-5 text-sky-400" />
+                  <FolderKanban className="h-5 w-5 text-primary" />
                   <h3 className="text-lg font-semibold">Professional structure</h3>
                 </div>
-                <p className="text-sm leading-6 text-slate-300">
+                <p className="text-sm leading-6 text-muted-foreground">
                   The layout is cleaner, one-column, ATS-safe, and ready for both freshers and experienced candidates with
                   sections for projects, achievements, tools, and certifications.
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className={metricCardClass}>
                 <div className="mb-3 flex items-center gap-2">
-                  <GraduationCap className="h-5 w-5 text-amber-400" />
+                  <GraduationCap className="h-5 w-5 text-primary" />
                   <h3 className="text-lg font-semibold">Real downloads</h3>
                 </div>
-                <p className="text-sm leading-6 text-slate-300">
+                <p className="text-sm leading-6 text-muted-foreground">
                   PDF and Word download buttons now generate actual files from the same structured resume data shown in the
                   preview.
                 </p>

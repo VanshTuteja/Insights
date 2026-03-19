@@ -18,6 +18,8 @@ import { useAuthStore } from '@/stores/authStore';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { toast } from '@/hooks/use-toast';
 import { Camera, Save } from 'lucide-react';
+import axios from 'axios';
+import { resolveAssetUrl } from '@/lib/utils';
 
 const profileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -35,9 +37,10 @@ interface ProfileDialogProps {
 
 const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const { user, updateProfile } = useAuthStore();
+  const { user, updateProfile, getProfile } = useAuthStore();
+  const avatarUrl = resolveAssetUrl(avatarPreview || user?.avatar);
 
   const form = useForm({
     resolver: zodResolver(profileSchema),
@@ -64,15 +67,36 @@ const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => 
     }
   }, [user, form]);
 
-  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setAvatarFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    setAvatarUploading(true);
+    try {
+      const response = await axios.post('/upload/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const avatarUrl = response.data?.data?.avatar;
+      if (avatarUrl) {
+        setAvatarPreview(avatarUrl);
+        await getProfile();
+      }
+      toast({
+        title: 'Profile photo uploaded',
+        description: 'Your profile photo has been uploaded successfully.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Upload failed',
+        description: error.response?.data?.message || error.response?.data?.error || 'Could not upload your profile photo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAvatarUploading(false);
+      event.target.value = '';
     }
   };
 
@@ -80,16 +104,11 @@ const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => 
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const updatedUser = {
-        ...user!,
+      await updateProfile({
         ...data,
         avatar: avatarPreview || user?.avatar,
-      };
-      
-      updateProfile(updatedUser);
+      });
+      await getProfile();
       
       toast({
         title: 'Profile updated',
@@ -123,14 +142,14 @@ const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => 
           <div className="flex flex-col items-center space-y-4">
             <div className="relative">
               <Avatar className="h-24 w-24">
-                <AvatarImage src={avatarPreview || user?.avatar} />
+                <AvatarImage src={avatarUrl} />
                 <AvatarFallback className="text-2xl">{user?.name?.[0]}</AvatarFallback>
               </Avatar>
               <label
                 htmlFor="avatar-upload"
                 className="absolute bottom-0 right-0 p-2 bg-primary rounded-full cursor-pointer hover:bg-primary/90 transition-colors"
               >
-                <Camera className="h-4 w-4 text-white" />
+                {avatarUploading ? <LoadingSpinner size="sm" className="text-white" /> : <Camera className="h-4 w-4 text-white" />}
                 <input
                   id="avatar-upload"
                   type="file"

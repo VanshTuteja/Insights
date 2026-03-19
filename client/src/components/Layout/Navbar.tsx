@@ -9,6 +9,7 @@ import ProfileDialog from '@/components/ProfileDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { resolveAssetUrl } from '@/lib/utils';
 
 interface NavbarProps {
   onToggleSidebar?: () => void;
@@ -21,6 +22,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   const [profileDialogOpen, setProfileDialogOpen] = React.useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = React.useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = React.useState(false);
+  const avatarUrl = resolveAssetUrl(user?.avatar);
 
   // Keep notification badge fresh while navigating across pages.
   React.useEffect(() => {
@@ -165,7 +167,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                 onClick={() => setUserDropdownOpen(!userDropdownOpen)}
               >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.avatar} alt={user?.name} />
+                  <AvatarImage src={avatarUrl} alt={user?.name} />
                   <AvatarFallback>{user?.name?.[0] || "U"}</AvatarFallback>
                 </Avatar>
               </button>

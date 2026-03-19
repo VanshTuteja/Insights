@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import axios from 'axios';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,13 +12,17 @@ import JobCard from '@/components/JobCard';
 import JobDetailsDialog from '@/components/JobDetailsDialog';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { useAuthStore } from '@/stores/authStore';
+import { useJobStore } from '@/stores/jobStore';
 import { useNotificationStore } from '@/stores/notificationStore';
 import { toast } from '@/hooks/use-toast';
+import { getMissingProfileFields } from '@/lib/profileCompletion';
+import { cn } from '@/lib/utils';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import { 
   Search, 
   Briefcase, 
   Users, 
-  TrendingUp, 
+  TrendingUp,
   Star, 
   Calendar, 
   Target, 
@@ -27,18 +33,62 @@ import {
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
-  const [savedJobs, setSavedJobs] = useState<string[]>([]);
+  const [applications, setApplications] = useState<any[]>([]);
+  const [interviews, setInterviews] = useState<any[]>([]);
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const { jobs, savedJobs, pagination, fetchJobs, fetchSavedJobs, saveJob } = useJobStore();
   const { notifications, unreadCount, fetchNotifications, markAsRead, deleteNotification } = useNotificationStore();
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const pageShellStyle = {
+    backgroundImage: darkTheme
+      ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.22), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.16), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.94) 100%)'
+      : 'radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.18), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.72) 52%, hsl(var(--background)) 100%)',
+  };
+  const mainCardClass = cn(
+    'border shadow-premium-lg backdrop-blur',
+    darkTheme ? 'border-primary/15 bg-card/80' : 'border-border/80 bg-card/95',
+  );
+  const heroCardClass = cn(
+    'rounded-3xl border px-6 py-6 shadow-premium-lg backdrop-blur-xl',
+    darkTheme ? 'border-primary/20 bg-card/80' : 'border-primary/10 bg-card/90',
+  );
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1500);
-    return () => clearTimeout(timer);
-  }, []);
+    if (user?.role !== 'jobseeker') {
+      setLoading(false);
+      return;
+    }
+
+    const loadDashboardData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchJobs({ limit: 12 }),
+          fetchSavedJobs(),
+          axios.get('/applications/candidate').then((res) => setApplications(res.data?.data || [])),
+          axios.get('/interviews/candidate').then((res) => setInterviews(res.data?.data || [])),
+        ]);
+      } catch (error) {
+        console.error(error);
+        toast({
+          title: 'Dashboard data unavailable',
+          description: 'Some live dashboard data could not be loaded.',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadDashboardData();
+  }, [user?.role, fetchJobs, fetchSavedJobs]);
 
   // Refresh notifications frequently while the dashboard is open.
   useEffect(() => {
@@ -75,73 +125,94 @@ const Dashboard: React.FC = () => {
   };
 }, [user?.role]); // ✅ removed fetchNotifications
 
+  const profileMissingFields = useMemo(() => getMissingProfileFields(user), [user]);
+  const profileCompletion = useMemo(() => {
+    const totalFields = user?.role === 'jobseeker' ? 8 : 3;
+    return Math.max(0, Math.round(((totalFields - profileMissingFields.length) / totalFields) * 100));
+  }, [profileMissingFields.length, user?.role]);
+
+  const activeApplications = useMemo(
+    () => applications.filter((item) => !['Rejected', 'Hired'].includes(item.status)).length,
+    [applications],
+  );
+
+  const upcomingInterviews = useMemo(
+    () =>
+      interviews
+        .filter((item) => item.status === 'scheduled')
+        .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()),
+    [interviews],
+  );
+
+  const formatPostedTime = (value?: string) => {
+    if (!value) return 'Recently posted';
+    const diff = Date.now() - new Date(value).getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours < 1) return 'Just now';
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(value).toLocaleDateString();
+  };
+
+  type RecommendedJob = {
+    id: string;
+    title: string;
+    company: string;
+    location: string;
+    salary: string;
+    type: string;
+    tags: string[];
+    description: string;
+    postedTime: string;
+    raw?: {
+      requirements?: string;
+      benefits?: string;
+    };
+  };
+
+  const recommendedJobs: RecommendedJob[] = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return jobs
+      .filter((job) => job.isActive)
+      .filter((job) => {
+        if (!query) return true;
+        return [job.title, job.company, job.location, ...(job.tags || [])]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(query));
+      })
+      .slice(0, 4)
+      .map((job) => ({
+        id: job._id,
+        title: job.title,
+        company: job.company || job.employerId?.company || 'Company',
+        location: job.location || 'Location not specified',
+        salary: job.salary || 'Salary not specified',
+        type: job.type,
+        tags: job.tags || [],
+        description: job.description,
+        postedTime: formatPostedTime(job.createdAt),
+        raw: {
+          requirements: job.requirements,
+          benefits: job.benefits,
+        },
+      }));
+  }, [jobs, searchQuery]);
+
+  const savedJobIds = useMemo(() => savedJobs.map((job) => job._id), [savedJobs]);
+
   const stats = [
-    { label: 'Jobs Available', value: '2,847', icon: Briefcase, color: 'from-blue-500 to-blue-600', change: '+12%' },
-    { label: 'Active Applications', value: '23', icon: Users, color: 'from-green-500 to-green-600', change: '+5' },
-    { label: 'Profile Views', value: '156', icon: TrendingUp, color: 'from-purple-500 to-purple-600', change: '+18%' },
-    { label: 'Saved Jobs', value: savedJobs.length.toString(), icon: Star, color: 'from-orange-500 to-orange-600', change: '+3' },
+    { label: 'Jobs Available', value: String(pagination.total || jobs.length), icon: Briefcase, color: 'from-blue-500 to-blue-600', change: `${recommendedJobs.length} shown now` },
+    { label: 'Active Applications', value: String(activeApplications), icon: Users, color: 'from-green-500 to-green-600', change: `${applications.length} total submitted` },
+    { label: 'Upcoming Interviews', value: String(upcomingInterviews.length), icon: Calendar, color: 'from-purple-500 to-purple-600', change: `${interviews.length} total interviews` },
+    { label: 'Saved Jobs', value: String(savedJobs.length), icon: Star, color: 'from-orange-500 to-orange-600', change: 'Live from your account' },
   ];
-
-  const recommendedJobs = [
-    {
-      id: '1',
-      title: 'Senior Frontend Developer',
-      company: 'TechCorp Inc.',
-      location: 'San Francisco, CA',
-      salary: '$120k - $160k',
-      type: 'Full-time',
-      tags: ['React', 'TypeScript', 'Next.js'],
-      description: 'Looking for an experienced frontend developer to join our growing team...',
-      postedTime: '2 hours ago',
-    },
-    {
-      id: '2',
-      title: 'Full Stack Engineer',
-      company: 'Startup Labs',
-      location: 'Remote',
-      salary: '$100k - $140k',
-      type: 'Full-time',
-      tags: ['Node.js', 'React', 'PostgreSQL'],
-      description: 'Join our innovative team working on cutting-edge solutions...',
-      postedTime: '1 day ago',
-    },
-    {
-      id: '3',
-      title: 'UI/UX Designer',
-      company: 'Design Studio',
-      location: 'New York, NY',
-      salary: '$90k - $120k',
-      type: 'Full-time',
-      tags: ['Figma', 'Adobe XD', 'Prototyping'],
-      description: 'Create beautiful and intuitive user experiences...',
-      postedTime: '3 days ago',
-    },
-  ];
-
-  type RecommendedJob = (typeof recommendedJobs)[number];
   const [selectedJob, setSelectedJob] = useState<RecommendedJob | null>(null);
 
-  const upcomingInterviews = [
-    {
-      company: 'TechCorp Inc.',
-      position: 'Senior Frontend Developer',
-      date: 'Tomorrow',
-      time: '2:00 PM',
-      type: 'Technical Interview',
-    },
-    {
-      company: 'Startup Labs',
-      position: 'Full Stack Engineer',
-      date: 'Friday',
-      time: '10:00 AM',
-      type: 'Final Interview',
-    },
-  ];
-
   const achievements = [
-    { title: 'Profile Completeness', progress: 85, target: 100 },
-    { title: 'Skill Assessments', progress: 3, target: 5 },
-    { title: 'Interview Practice', progress: 7, target: 10 },
+    { title: 'Profile Completeness', progress: profileCompletion, target: 100 },
+    { title: 'Applications Submitted', progress: Math.min(applications.length, 10), target: 10 },
+    { title: 'Interview Pipeline', progress: Math.min(upcomingInterviews.length + applications.filter((item) => item.status === 'Interview Scheduled').length, 5), target: 5 },
   ];
 
   const quickActions = [
@@ -184,26 +255,30 @@ const Dashboard: React.FC = () => {
     setJobDetailsOpen(true);
   };
 
-  const handleSaveJob = (jobId: string) => {
-    if (savedJobs.includes(jobId)) {
-      setSavedJobs(savedJobs.filter(id => id !== jobId));
+  const handleSaveJob = async (jobId: string) => {
+    try {
+      await saveJob(jobId);
+      await fetchSavedJobs();
       toast({
-        title: 'Job removed from saved',
-        description: 'The job has been removed from your saved list.',
+        title: savedJobIds.includes(jobId) ? 'Saved jobs refreshed' : 'Job saved successfully',
+        description: savedJobIds.includes(jobId)
+          ? 'Your saved jobs list has been refreshed.'
+          : 'The job has been added to your saved list.',
       });
-    } else {
-      setSavedJobs([...savedJobs, jobId]);
+    } catch (error: any) {
       toast({
-        title: 'Job saved successfully',
-        description: 'The job has been added to your saved list.',
+        title: 'Save failed',
+        description: error.message || 'Could not save this job right now.',
+        variant: 'destructive',
       });
     }
   };
 
-  const handleApplyJob = () => {
+  const handleApplyJob = (_jobId: string) => {
+    navigate(`/jobs`);
     toast({
-      title: 'Application submitted',
-      description: 'Your application has been sent to the employer.',
+      title: 'Continue from jobs',
+      description: 'Open the Jobs page to complete the application with full details.',
     });
   };
 
@@ -216,11 +291,16 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" style={pageShellStyle}>
       {/* Welcome Message */}
       <AnimatedSection>
+        <div className={heroCardClass}>
         <h1 className="text-2xl font-bold">Welcome back, {user?.name || 'User'} 👋</h1>
         <p className="text-muted-foreground">Here's what's happening with your job search today.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Theme: <span className="font-medium text-foreground">{themePreview.label}</span>
+          </p>
+        </div>
       </AnimatedSection>
 
       {/* Hero Carousel Section */}
@@ -230,7 +310,7 @@ const Dashboard: React.FC = () => {
 
       {/* Search Section */}
       <AnimatedSection delay={0.2}>
-        <Card className="bg-gradient-to-r from-primary/5 to-secondary/5 border-0">
+        <Card className={cn(mainCardClass, darkTheme ? 'bg-gradient-to-r from-primary/10 to-accent/10' : 'bg-gradient-to-r from-primary/5 to-secondary/5')}>
           <CardContent className="p-6">
             <div className="flex space-x-4">
               <div className="flex-1 relative">
@@ -242,7 +322,7 @@ const Dashboard: React.FC = () => {
                   className="pl-10"
                 />
               </div>
-              <Button className="bg-gradient-to-r from-primary to-secondary">
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => navigate('/jobs')}>
                 Search Jobs
               </Button>
             </div>
@@ -261,16 +341,16 @@ const Dashboard: React.FC = () => {
               transition={{ delay: 0.1 * index, duration: 0.3 }}
               whileHover={{ scale: 1.05 }}
             >
-              <Card className="overflow-hidden border-0 shadow-lg">
+              <Card className={cn('overflow-hidden', mainCardClass)}>
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-4">
-                    <div className={`p-3 rounded-full bg-gradient-to-br ${stat.color}`}>
-                      <stat.icon className="h-6 w-6 text-white" />
+                    <div className={cn('p-3 rounded-full', darkTheme ? 'bg-primary/18' : 'bg-primary/10')}>
+                      <stat.icon className="h-6 w-6 text-primary" />
                     </div>
                     <div>
                       <p className="text-2xl font-bold">{stat.value}</p>
                       <p className="text-sm text-muted-foreground">{stat.label}</p>
-                      <p className="text-xs text-green-600 font-medium">{stat.change} this week</p>
+                      <p className="text-xs font-medium text-primary">{stat.change}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -288,33 +368,47 @@ const Dashboard: React.FC = () => {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">Recommended for You</h2>
-                <Button variant="outline">View All</Button>
+                <Button variant="outline" asChild>
+                  <Link to="/jobs">View All</Link>
+                </Button>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {recommendedJobs.map((job, index) => (
-                  <motion.div
-                    key={job.id}
-                    initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 * index, duration: 0.4 }}
-                  >
-                    <JobCard 
-                      job={job}
-                      onSave={handleSaveJob}
-                      onApply={handleApplyJob}
-                      onViewDetails={handleViewDetails}
-                      isSaved={savedJobs.includes(job.id)}
-                    />
-                  </motion.div>
-                ))}
-              </div>
+              {recommendedJobs.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {recommendedJobs.map((job, index) => (
+                    <motion.div
+                      key={job.id}
+                      initial={{ opacity: 0, y: 50 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 * index, duration: 0.4 }}
+                    >
+                      <JobCard 
+                        job={job}
+                        onSave={handleSaveJob}
+                        onApply={handleApplyJob}
+                        onViewDetails={handleViewDetails}
+                        isSaved={savedJobIds.includes(job.id)}
+                      />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <Card className={mainCardClass}>
+                  <CardContent className="py-12 text-center">
+                    <Briefcase className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+                    <p className="font-medium">No matching jobs right now</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Try a broader search or explore all openings on the Jobs page.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </AnimatedSection>
 
           {/* Quick Actions - Enhanced */}
           <AnimatedSection delay={0.6}>
-            <Card className="bg-gradient-to-br from-accent/10 to-secondary/5 border-0 shadow-lg">
+            <Card className={cn(mainCardClass, darkTheme ? 'bg-gradient-to-br from-primary/10 to-accent/10' : 'bg-gradient-to-br from-accent/10 to-secondary/5')}>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Zap className="h-5 w-5" />
@@ -331,17 +425,17 @@ const Dashboard: React.FC = () => {
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.1 * index }}
                       whileHover={{ scale: 1.02, y: -2 }}
-                      className="p-4 bg-background rounded-lg border hover:shadow-md transition-all cursor-pointer"
+                      className={cn('p-4 rounded-lg border hover:shadow-md transition-all', darkTheme ? 'bg-background/50 border-border/70' : 'bg-background border-border')}
                     >
                       <div className="flex items-center space-x-3 mb-3">
-                        <div className={`p-2 bg-gradient-to-br ${item.color} rounded-lg`}>
-                          <item.icon className="h-4 w-4 text-white" />
+                        <div className={cn('p-2 rounded-lg', darkTheme ? 'bg-primary/18' : 'bg-primary/10')}>
+                          <item.icon className="h-4 w-4 text-primary" />
                         </div>
                         <h3 className="font-semibold">{item.title}</h3>
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">{item.desc}</p>
-                      <Button size="sm" variant="outline" className="w-full">
-                        {item.action}
+                      <Button size="sm" variant="outline" className="w-full" asChild>
+                        <Link to={item.path}>{item.action}</Link>
                       </Button>
                     </motion.div>
                   ))}
@@ -355,7 +449,7 @@ const Dashboard: React.FC = () => {
         <div className="space-y-6">
           {/* Notifications */}
           <AnimatedSection delay={0.5}>
-            <Card>
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -437,11 +531,11 @@ const timeSince = new Date(notification.createdAt).toLocaleString();
                         className={`p-3 rounded-lg border transition-all ${
                           !notification.read 
                             ? 'bg-primary/5 border-primary/20 hover:bg-primary/10' 
-                            : 'bg-accent/10 hover:bg-accent/20'
+                            : darkTheme ? 'bg-background/45 hover:bg-background/60' : 'bg-accent/10 hover:bg-accent/20'
                         }`}
                       >
                         <div className="flex items-start space-x-3 group">
-                          <div className={`p-2 rounded-full ${config.bg} ${config.text} flex-shrink-0`}>
+                          <div className={cn('p-2 rounded-full flex-shrink-0', darkTheme ? 'bg-primary/18 text-primary' : `${config.bg} ${config.text}`)}>
                             <config.icon className="h-4 w-4" />
                           </div>
                           <div className="flex-1 min-w-0 cursor-pointer" onClick={handleMarkAsRead}>
@@ -482,7 +576,7 @@ const timeSince = new Date(notification.createdAt).toLocaleString();
 
           {/* Upcoming Interviews */}
           <AnimatedSection delay={0.6}>
-            <Card>
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Calendar className="h-5 w-5" />
@@ -490,38 +584,46 @@ const timeSince = new Date(notification.createdAt).toLocaleString();
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {upcomingInterviews.map((interview, index) => (
+                {upcomingInterviews.length > 0 ? upcomingInterviews.slice(0, 3).map((interview, index) => (
                   <motion.div
-                    key={index}
+                    key={interview._id || index}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 * index }}
                     whileHover={{ scale: 1.02 }}
-                    className="p-3 bg-gradient-to-r from-accent/10 to-accent/5 rounded-lg border cursor-pointer hover:shadow-md transition-all"
+                    className={cn('p-3 rounded-lg border hover:shadow-md transition-all', darkTheme ? 'bg-background/45 border-border/70' : 'bg-gradient-to-r from-accent/10 to-accent/5')}
                   >
-                    <h4 className="font-semibold text-sm">{interview.position}</h4>
-                    <p className="text-xs text-muted-foreground">{interview.company}</p>
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-xs font-medium">{interview.date} at {interview.time}</span>
-                      <Badge variant="outline" className="text-xs">{interview.type}</Badge>
+                    <h4 className="font-semibold text-sm">{interview.jobId?.title || 'Interview'}</h4>
+                    <p className="text-xs text-muted-foreground">{interview.jobId?.company || 'Company'}</p>
+                    <div className="flex justify-between items-center mt-2 gap-2">
+                      <span className="text-xs font-medium">
+                        {new Date(interview.scheduledAt).toLocaleDateString()} at {new Date(interview.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <Badge variant="outline" className="text-xs capitalize">{interview.type || 'Interview'}</Badge>
                     </div>
                     <div className="flex space-x-2 mt-2">
-                      <Button size="sm" variant="outline" className="text-xs h-6">
-                        Reschedule
+                      <Button size="sm" variant="outline" className="text-xs h-6" asChild>
+                        <Link to="/interviews">Manage</Link>
                       </Button>
-                      <Button size="sm" className="text-xs h-6">
-                        Prepare
+                      <Button size="sm" className="text-xs h-6" asChild>
+                        <Link to="/interview">Prepare</Link>
                       </Button>
                     </div>
                   </motion.div>
-                ))}
+                )) : (
+                  <div className="py-8 text-center">
+                    <Calendar className="h-12 w-12 text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No upcoming interviews</p>
+                    <p className="text-xs text-muted-foreground mt-1">Scheduled interviews will show up here automatically.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </AnimatedSection>
 
           {/* Progress Tracking */}
           <AnimatedSection delay={0.7}>
-            <Card>
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Target className="h-5 w-5" />
@@ -544,9 +646,9 @@ const timeSince = new Date(notification.createdAt).toLocaleString();
                         {achievement.progress}/{achievement.target}
                       </span>
                     </div>
-                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                    <div className={cn('h-2 rounded-full overflow-hidden', darkTheme ? 'bg-background/60' : 'bg-secondary')}>
                       <motion.div
-                        className="h-full bg-gradient-to-r from-primary to-secondary"
+                        className="h-full bg-primary"
                         initial={{ width: 0 }}
                         animate={{ width: `${(achievement.progress / achievement.target) * 100}%` }}
                         transition={{ delay: 0.5 + 0.2 * index, duration: 0.8 }}

@@ -76,18 +76,24 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
 
   if (error.code === 'LIMIT_FILE_SIZE') {
     return res.status(400).json({
-      error: 'File too large. Maximum size is 100MB.'
+      success: false,
+      message: 'File too large. Profile photos can be up to 15MB and resumes up to 10MB.',
+      error: 'File too large. Profile photos can be up to 15MB and resumes up to 10MB.'
     });
   }
 
   if (error.code === 'LIMIT_UNEXPECTED_FILE') {
     return res.status(400).json({
+      success: false,
+      message: 'Unexpected file field.',
       error: 'Unexpected file field.'
     });
   }
 
   if (error.name === 'ValidationError') {
     return res.status(400).json({
+      success: false,
+      message: 'Validation error',
       error: 'Validation error',
       details: error.message
     });
@@ -95,11 +101,15 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
 
   if (error.name === 'CastError') {
     return res.status(400).json({
+      success: false,
+      message: 'Invalid ID format',
       error: 'Invalid ID format'
     });
   }
 
   return res.status(500).json({
+    success: false,
+    message: config.nodeEnv === 'development' ? error.message : 'Internal server error',
     error: config.nodeEnv === 'development' ? error.message : 'Internal server error'
   });
 });

@@ -62,7 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
       ];
 
   const secondaryNavItems: NavItem[] = [
-    { path: '/messaging', label: 'Messages', icon: Mail, badge: 3 },
+    // { path: '/messaging', label: 'Messages', icon: Mail, badge: 3 },
     { path: '/settings', label: 'Settings', icon: Settings },
     { path: '/help', label: 'Help & Support', icon: HelpCircle },
   ];

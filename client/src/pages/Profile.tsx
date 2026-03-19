@@ -18,7 +18,9 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { getMissingProfileFields, isProfileComplete } from '@/lib/profileCompletion';
+import { cn, resolveAssetUrl } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import {
   Briefcase,
   Building2,
@@ -158,8 +160,12 @@ const buildSchema = (isJobSeeker: boolean) =>
 
 const Profile: React.FC = () => {
   const { user, getProfile, updateProfile } = useAuthStore();
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
   const [isSaving, setIsSaving] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeUploading, setResumeUploading] = useState(false);
   const [skills, setSkills] = useState<string[]>([]);
@@ -174,6 +180,29 @@ const Profile: React.FC = () => {
   const profileComplete = isProfileComplete(user);
   const totalRequiredFields = isJobSeeker ? 10 : 9;
   const completionPercent = Math.max(0, Math.round(((totalRequiredFields - missingFields.length) / totalRequiredFields) * 100));
+  const pageShellStyle = {
+    backgroundImage: darkTheme
+      ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.22), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.16), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.94) 100%)'
+      : 'radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.18), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.72) 52%, hsl(var(--background)) 100%)',
+  };
+  const heroClass = cn(
+    'rounded-3xl border px-6 py-8 shadow-premium-lg backdrop-blur-xl',
+    darkTheme ? 'border-primary/20 bg-card/80 text-card-foreground' : 'border-primary/10 bg-card/90 text-card-foreground',
+  );
+  const mainCardClass = cn(
+    'border shadow-premium-lg backdrop-blur',
+    darkTheme ? 'border-primary/15 bg-card/80' : 'border-border/80 bg-card/95',
+  );
+  const softPanelClass = cn(
+    'rounded-2xl border p-4',
+    darkTheme ? 'border-border/70 bg-background/55 text-foreground/80' : 'border-border bg-muted/60 text-foreground/80',
+  );
+  const pillClass = cn(
+    'inline-flex items-center gap-2 rounded-full px-3 py-1',
+    darkTheme ? 'bg-white/8 text-foreground/80' : 'bg-background/70 text-foreground/80',
+  );
+  const sectionTitleClass = 'font-medium text-foreground';
+  const avatarUrl = resolveAssetUrl(avatarPreview || user?.avatar);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(schema),
@@ -224,14 +253,39 @@ const Profile: React.FC = () => {
 
   const resumeViewUrl =
     user?.resumeUrl &&
-    `${(import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '')}${user.resumeUrl}`;
+    resolveAssetUrl(user.resumeUrl);
 
-  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setAvatarPreview(reader.result as string);
-    reader.readAsDataURL(file);
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    setAvatarUploading(true);
+    try {
+      const response = await axios.post('/upload/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const avatarUrl = response.data?.data?.avatar;
+      if (avatarUrl) {
+        setAvatarPreview(avatarUrl);
+        await getProfile();
+      }
+      toast({
+        title: 'Profile photo uploaded',
+        description: 'Your profile photo has been uploaded successfully.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Photo upload failed',
+        description: error.response?.data?.message || error.response?.data?.error || 'Could not upload your profile photo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAvatarUploading(false);
+      event.target.value = '';
+    }
   };
 
   const handleResumeUpload = async () => {
@@ -261,7 +315,7 @@ const Profile: React.FC = () => {
     } catch (error: any) {
       toast({
         title: 'Upload failed',
-        description: error.response?.data?.message || 'Could not upload resume.',
+        description: error.response?.data?.message || error.response?.data?.error || 'Could not upload resume.',
         variant: 'destructive',
       });
     } finally {
@@ -320,23 +374,23 @@ const Profile: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" style={pageShellStyle}>
       <AnimatedSection>
-        <div className="rounded-3xl border bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,41,59,0.94))] px-6 py-8 text-white shadow-xl">
+        <div className={heroClass}>
           <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-5">
               <div className="relative">
-                <Avatar className="h-24 w-24 border-4 border-white/15 shadow-lg">
-                  <AvatarImage src={avatarPreview || user?.avatar} />
-                  <AvatarFallback className="bg-white/10 text-2xl text-white">
+                <Avatar className="h-24 w-24 border-4 border-primary/20 shadow-lg">
+                  <AvatarImage src={avatarUrl} />
+                  <AvatarFallback className={cn('text-2xl', darkTheme ? 'bg-primary/20 text-primary-foreground' : 'bg-primary/10 text-foreground')}>
                     {user?.name?.[0] || 'U'}
                   </AvatarFallback>
                 </Avatar>
                 <label
                   htmlFor="avatar-upload"
-                  className="absolute -bottom-1 -right-1 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow-lg transition hover:bg-amber-300"
+                  className="absolute -bottom-1 -right-1 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:opacity-90"
                 >
-                  <Camera className="h-4 w-4" />
+                  {avatarUploading ? <LoadingSpinner size="sm" /> : <Camera className="h-4 w-4" />}
                   <input
                     id="avatar-upload"
                     type="file"
@@ -349,25 +403,25 @@ const Profile: React.FC = () => {
 
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.2em] text-white/60">Professional Profile</p>
+                  <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Professional Profile</p>
                   <h1 className="text-3xl font-semibold">{user?.name || 'Your profile'}</h1>
-                  <p className="mt-1 text-white/75">
+                  <p className="mt-1 text-muted-foreground">
                     {user?.jobTitle || (isJobSeeker ? 'Job Seeker' : 'Employer')} {user?.company ? `at ${user.company}` : ''}
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-2 text-sm text-white/80">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <span className={pillClass}>
                     <Mail className="h-4 w-4" />
                     {user?.email}
                   </span>
                   {user?.location && (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
+                    <span className={pillClass}>
                       <MapPin className="h-4 w-4" />
                       {user.location}
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1 text-emerald-200">
+                  <span className={cn('inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm', darkTheme ? 'bg-primary/18 text-primary-foreground' : 'bg-primary/10 text-primary')}>
                     <Sparkles className="h-4 w-4" />
                     {isJobSeeker ? 'Candidate account' : 'Employer account'}
                   </span>
@@ -375,23 +429,26 @@ const Profile: React.FC = () => {
               </div>
             </div>
 
-            <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white/8 p-5 backdrop-blur">
+            <div className={cn('w-full max-w-sm space-y-3 rounded-2xl p-5 backdrop-blur', darkTheme ? 'bg-background/55' : 'bg-background/80')}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-white/70">Completion status</p>
+                  <p className="text-sm text-muted-foreground">Completion status</p>
                   <p className="text-2xl font-semibold">{completionPercent}%</p>
                 </div>
                 {profileComplete ? (
-                  <Badge className="bg-emerald-500 text-white hover:bg-emerald-500">Ready</Badge>
+                  <Badge className="bg-primary text-primary-foreground hover:bg-primary">Ready</Badge>
                 ) : (
-                  <Badge variant="secondary" className="bg-amber-300 text-slate-900 hover:bg-amber-300">
+                  <Badge variant="secondary" className={cn(darkTheme ? 'bg-primary/18 text-primary-foreground hover:bg-primary/18' : 'bg-primary/12 text-primary hover:bg-primary/12')}>
                     Action needed
                   </Badge>
                 )}
               </div>
-              <Progress value={completionPercent} className="bg-white/15" />
-              <p className="text-sm text-white/70">
+              <Progress value={completionPercent} className={cn(darkTheme ? 'bg-background/60' : 'bg-background/70')} />
+              <p className="text-sm text-muted-foreground">
                 Complete the remaining required fields to unlock all platform features.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Theme: <span className="font-medium text-foreground">{themePreview.label}</span>
               </p>
             </div>
           </div>
@@ -401,10 +458,10 @@ const Profile: React.FC = () => {
       <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
         <div className="space-y-6">
           <AnimatedSection delay={0.05}>
-            <Card className="border-slate-200 shadow-sm">
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
                   Profile checklist
                 </CardTitle>
                 <CardDescription>
@@ -413,17 +470,17 @@ const Profile: React.FC = () => {
               </CardHeader>
               <CardContent className="space-y-3">
                 {missingFields.length === 0 ? (
-                  <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  <div className={cn('rounded-2xl px-4 py-3 text-sm', darkTheme ? 'bg-primary/14 text-primary-foreground' : 'bg-primary/10 text-primary')}>
                     Your profile is complete and ready to use.
                   </div>
                 ) : (
                   missingFields.map((field) => (
                     <div
                       key={field}
-                      className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2"
+                      className={cn('flex items-center justify-between rounded-xl border px-3 py-2', darkTheme ? 'border-border/70 bg-background/45' : 'border-border bg-background/80')}
                     >
-                      <span className="text-sm font-medium text-slate-700">{fieldLabels[field] || field}</span>
-                      <Badge variant="outline" className="border-amber-300 text-amber-700">
+                      <span className="text-sm font-medium text-foreground">{fieldLabels[field] || field}</span>
+                      <Badge variant="outline" className={cn(darkTheme ? 'border-primary/30 text-primary-foreground' : 'border-primary/30 text-primary')}>
                         Pending
                       </Badge>
                     </div>
@@ -434,7 +491,7 @@ const Profile: React.FC = () => {
           </AnimatedSection>
 
           <AnimatedSection delay={0.1}>
-            <Card className="border-slate-200 shadow-sm">
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   {isJobSeeker ? <FileText className="h-5 w-5" /> : <Building2 className="h-5 w-5" />}
@@ -486,13 +543,13 @@ const Profile: React.FC = () => {
                     )}
                   </>
                 ) : (
-                  <div className="space-y-3 text-sm text-slate-600">
-                    <div className="rounded-xl bg-slate-50 p-4">
-                      <p className="font-medium text-slate-900">Company</p>
+                  <div className="space-y-3 text-sm">
+                    <div className={softPanelClass}>
+                      <p className={sectionTitleClass}>Company</p>
                       <p>{user?.company || 'Add your company name in the form.'}</p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 p-4">
-                      <p className="font-medium text-slate-900">Industry</p>
+                    <div className={softPanelClass}>
+                      <p className={sectionTitleClass}>Industry</p>
                       <p>{user?.industry || 'Select your industry to complete the profile.'}</p>
                     </div>
                   </div>
@@ -504,7 +561,7 @@ const Profile: React.FC = () => {
 
         <AnimatedSection delay={0.12}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Card className="border-slate-200 shadow-sm">
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <User className="h-5 w-5" />
@@ -559,7 +616,7 @@ const Profile: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card className="border-slate-200 shadow-sm">
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Briefcase className="h-5 w-5" />
@@ -606,7 +663,7 @@ const Profile: React.FC = () => {
                       <Label htmlFor="companySize">Company Size</Label>
                       <Select
                         value={form.watch('companySize')}
-                        onValueChange={(value) => form.setValue('companySize', value, { shouldValidate: true })}
+                        onValueChange={(value) => form.setValue('companySize', value, { shouldValidate: true, shouldDirty: true, shouldTouch: true })}
                       >
                         <SelectTrigger id="companySize">
                           <SelectValue placeholder="Select company size" />
@@ -625,7 +682,7 @@ const Profile: React.FC = () => {
                       <Label htmlFor="industry">Industry</Label>
                       <Select
                         value={form.watch('industry')}
-                        onValueChange={(value) => form.setValue('industry', value, { shouldValidate: true })}
+                        onValueChange={(value) => form.setValue('industry', value, { shouldValidate: true, shouldDirty: true, shouldTouch: true })}
                       >
                         <SelectTrigger id="industry">
                           <SelectValue placeholder="Select industry" />
@@ -647,7 +704,7 @@ const Profile: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card className="border-slate-200 shadow-sm">
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Sparkles className="h-5 w-5" />
@@ -679,7 +736,10 @@ const Profile: React.FC = () => {
                     <Badge
                       key={skill}
                       variant="outline"
-                      className="cursor-pointer border-slate-300 px-3 py-1 hover:border-slate-900 hover:bg-slate-900 hover:text-white"
+                      className={cn(
+                        'cursor-pointer px-3 py-1 transition-colors',
+                        darkTheme ? 'border-border/70 hover:border-primary hover:bg-primary/15 hover:text-primary-foreground' : 'border-border hover:border-primary hover:bg-primary hover:text-primary-foreground',
+                      )}
                       onClick={() => addSkill(skill)}
                     >
                       {skill}
@@ -687,9 +747,9 @@ const Profile: React.FC = () => {
                   ))}
                 </div>
 
-                <div className="rounded-2xl border border-dashed border-slate-300 p-4">
+                <div className={cn('rounded-2xl border border-dashed p-4', darkTheme ? 'border-border/70 bg-background/35' : 'border-border bg-background/70')}>
                   <div className="mb-3 flex items-center justify-between">
-                    <p className="font-medium text-slate-900">Selected skills</p>
+                    <p className={sectionTitleClass}>Selected skills</p>
                     <Badge variant="secondary">{skills.length}</Badge>
                   </div>
                   {skills.length === 0 ? (
@@ -710,7 +770,7 @@ const Profile: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card className="border-slate-200 shadow-sm">
+            {/* <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="h-5 w-5" />
@@ -821,13 +881,13 @@ const Profile: React.FC = () => {
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             <div className="sticky bottom-4 z-10">
-              <div className="rounded-2xl border bg-background/95 p-4 shadow-lg backdrop-blur">
+              <div className={cn('rounded-2xl border p-4 shadow-lg backdrop-blur', darkTheme ? 'border-primary/15 bg-card/88' : 'border-border/80 bg-background/95')}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-slate-900">Save your profile progress</p>
+                    <p className="text-sm font-medium text-foreground">Save your profile progress</p>
                     <p className="text-sm text-muted-foreground">
                       You can save now and continue editing. Access stays locked until all required fields are complete.
                     </p>
