@@ -161,6 +161,30 @@ const Insights = () => {
   const mainCardClass = cn('border shadow-premium-lg backdrop-blur', darkTheme ? 'bg-card/80 border-primary/10' : 'bg-card/95 border-border/80');
   const metricCardClass = cn('rounded-2xl border p-4', darkTheme ? 'border-primary/20 bg-background/50' : 'border-primary/10 bg-background/80');
   const infoPanelClass = cn('rounded-2xl border p-4 text-sm', darkTheme ? 'border-border/70 bg-background/50 text-foreground/80' : 'border-border bg-muted/60 text-foreground/80');
+  const tooltipStyle = useMemo(
+    () => ({
+      contentStyle: {
+        backgroundColor: darkTheme ? 'hsl(var(--card) / 0.96)' : 'hsl(var(--background) / 0.98)',
+        borderColor: darkTheme ? 'hsl(var(--primary) / 0.24)' : 'hsl(var(--border))',
+        borderRadius: '14px',
+        boxShadow: darkTheme
+          ? '0 18px 45px rgba(0, 0, 0, 0.38)'
+          : '0 18px 45px rgba(15, 23, 42, 0.14)',
+        color: 'hsl(var(--foreground))',
+      },
+      labelStyle: {
+        color: 'hsl(var(--foreground))',
+        fontWeight: 600,
+      },
+      itemStyle: {
+        color: 'hsl(var(--foreground))',
+      },
+      cursor: {
+        fill: darkTheme ? 'hsl(var(--primary) / 0.08)' : 'hsl(var(--primary) / 0.06)',
+      },
+    }),
+    [darkTheme],
+  );
 
   if (isEmployer) {
     return (
@@ -374,7 +398,7 @@ const Insights = () => {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                         <XAxis dataKey="year" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <Tooltip formatter={(value: number) => [value.toLocaleString('en-IN'), 'Openings']} />
+                        <Tooltip {...tooltipStyle} formatter={(value: number) => [value.toLocaleString('en-IN'), 'Openings']} />
                         <Bar dataKey="openings" radius={[8, 8, 0, 0]} fill="url(#growthGradientIndia)" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -419,7 +443,7 @@ const Insights = () => {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <Tooltip formatter={(value: number, name) => [formatLpa(value), name === 'current' ? 'Current market' : 'Future projection']} />
+                        <Tooltip {...tooltipStyle} formatter={(value: number, name) => [formatLpa(value), name === 'current' ? 'Current market' : 'Future projection']} />
                         <Area type="monotone" dataKey="current" stroke={chartPrimary} strokeWidth={2.5} fill="url(#salaryCurrentIndia)" />
                         <Area type="monotone" dataKey="future" stroke={chartSuccess} strokeWidth={2.5} fill="url(#salaryFutureIndia)" />
                       </AreaChart>
@@ -457,7 +481,7 @@ const Insights = () => {
                         <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                         <Radar dataKey="required" name="Market requirement" stroke={chartWarning} fill={chartWarning} fillOpacity={0.28} />
                         <Radar dataKey="you" name="Selected experience" stroke={chartPrimary} fill={chartPrimary} fillOpacity={0.32} />
-                        <Tooltip />
+                        <Tooltip {...tooltipStyle} />
                       </RadarChart>
                     </ResponsiveContainer>
                   </div>
@@ -486,7 +510,7 @@ const Insights = () => {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                         <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <Tooltip />
+                        <Tooltip {...tooltipStyle} />
                         <Bar dataKey="applicants" name="Applicants" fill={chartDanger} radius={[6, 6, 0, 0]} />
                         <Bar dataKey="openings" name="Openings" fill={chartSuccess} radius={[6, 6, 0, 0]} />
                       </BarChart>
@@ -517,7 +541,7 @@ const Insights = () => {
                         <Pie data={locationData} cx="50%" cy="50%" innerRadius={62} outerRadius={110} paddingAngle={4} dataKey="value">
                           {locationData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                         </Pie>
-                        <Tooltip formatter={(value: number) => [`${value}%`, 'Share of roles']} />
+                        <Tooltip {...tooltipStyle} formatter={(value: number) => [`${value}%`, 'Share of roles']} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -620,7 +644,7 @@ const Insights = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="skill" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                       <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <Tooltip formatter={(value: number) => [`${value}%`, 'Demand score']} />
+                      <Tooltip {...tooltipStyle} formatter={(value: number) => [`${value}%`, 'Demand score']} />
                       <Bar dataKey="demand" fill="url(#demandGradientIndia)" radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
