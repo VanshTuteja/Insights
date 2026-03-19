@@ -5,6 +5,7 @@ import Application from '../models/Application';
 import Interview from '../models/Interview';
 import { AuthRequest } from '../types';
 import type { ApplicationStatus } from '../models/Application';
+import { createNotificationForUsers } from './notificationController';
 
 /** POST /applications/apply – Job seeker applies; creates Application doc (source of truth). */
 export const applyForJob = async (req: AuthRequest, res: Response) => {
@@ -57,6 +58,16 @@ export const applyForJob = async (req: AuthRequest, res: Response) => {
         },
       },
     });
+
+    if (job.employerId) {
+      await createNotificationForUsers(
+        [job.employerId],
+        'application-update',
+        'New application received',
+        `A candidate has applied for ${job.title} at ${job.company || 'your company'}.`,
+        job._id,
+      );
+    }
 
     return res.status(201).json({
       success: true,
@@ -274,6 +285,16 @@ export const updateApplicationStatus = async (req: AuthRequest, res: Response) =
 
     application.status = status as ApplicationStatus;
     await application.save();
+
+    if (application.candidateId) {
+      await createNotificationForUsers(
+        [application.candidateId as any],
+        'application-update',
+        `Application status updated: ${status}`,
+        `Your application for ${job.title} at ${job.company || 'the company'} is now ${status}.`,
+        job._id,
+      );
+    }
 
     return res.json({
       success: true,

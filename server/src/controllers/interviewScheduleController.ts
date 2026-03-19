@@ -2,7 +2,9 @@ import { Response } from 'express';
 import Interview from '../models/Interview';
 import Job from '../models/Job';
 import Application from '../models/Application';
+import User from '../models/Users';
 import { AuthRequest } from '../types';
+import { createNotificationForUsers } from './notificationController';
 
 export const scheduleInterview = async (req: AuthRequest, res: Response) => {
   try {
@@ -14,14 +16,16 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       type,
       meetingLink,
       notes,
+      duration,
     } = req.body as {
       jobId?: string;
       candidateId?: string;
       date?: string;
       time?: string;
-      type?: 'video' | 'phone' | 'onsite';
+      type?: 'video' | 'phone' | 'onsite' | 'in-person';
       meetingLink?: string;
       notes?: string;
+      duration?: number;
     };
 
     const employerId = req.user?.userId;
@@ -48,29 +52,71 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const isoString = new Date(`${date}T${time}`).toISOString();
+    const candidate = await User.findById(candidateId).select('_id name email');
+    if (!candidate || candidate.role !== 'jobseeker') {
+      return res.status(404).json({
+        success: false,
+        message: 'Candidate not found',
+      });
+    }
 
-    const mappedType =
-      type === 'onsite' ? 'in-person' : (type as 'video' | 'phone');
+    const application = await Application.findOne({ jobId, candidateId });
+    if (!application) {
+      return res.status(400).json({
+        success: false,
+        message: 'This candidate has not applied to the selected job',
+      });
+    }
+
+    const scheduledAt = new Date(`${date}T${time}`);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a valid interview date and time',
+      });
+    }
+
+    const mappedType = type === 'onsite' || type === 'in-person' ? 'in-person' : (type as 'video' | 'phone');
+    const trimmedMeetingValue = typeof meetingLink === 'string' ? meetingLink.trim() : '';
+    const normalizedDuration =
+      typeof duration === 'number' && Number.isFinite(duration)
+        ? Math.min(480, Math.max(15, duration))
+        : 60;
+
+    if ((mappedType === 'video' || mappedType === 'phone') && !trimmedMeetingValue) {
+      return res.status(400).json({
+        success: false,
+        message: mappedType === 'video' ? 'Meeting link is required for video interviews' : 'Phone or meeting details are required for phone interviews',
+      });
+    }
 
     const interview = new Interview({
       jobId,
       candidateId,
       interviewerId: employerId,
       employerId,
-      scheduledAt: isoString,
-      duration: 60,
+      scheduledAt,
+      duration: normalizedDuration,
       type: mappedType,
       status: 'scheduled',
-      notes,
-      meetingLink,
+      notes: notes?.trim(),
+      meetingLink: mappedType === 'in-person' ? undefined : trimmedMeetingValue || undefined,
+      location: mappedType === 'in-person' ? trimmedMeetingValue || job.location : undefined,
     });
 
     await interview.save();
 
     await Application.findOneAndUpdate(
-      { jobId, candidateId },
+      { _id: application._id },
       { $set: { status: 'Interview Scheduled' } }
+    );
+
+    await createNotificationForUsers(
+      [interview.candidateId as any],
+      'interview-scheduled',
+      'Interview scheduled',
+      `Your interview for ${job.title} at ${job.company || 'the company'} has been scheduled on ${scheduledAt.toLocaleString()}.`,
+      job._id
     );
 
     const populated = await Interview.findById(interview._id)
@@ -140,12 +186,14 @@ export const getEmployerInterviews = async (req: AuthRequest, res: Response) => 
 export const updateInterview = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params as { id: string };
-    const { status, date, time, meetingLink, notes } = req.body as {
+    const { status, date, time, meetingLink, notes, type, duration } = req.body as {
       status?: 'scheduled' | 'cancelled' | 'rescheduled' | 'completed';
       date?: string;
       time?: string;
       meetingLink?: string;
       notes?: string;
+      type?: 'video' | 'phone' | 'onsite' | 'in-person';
+      duration?: number;
     };
     const userId = req.user?.userId;
 
@@ -177,13 +225,49 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
       interview.status = 'cancelled';
     } else {
       if (status) interview.status = status;
-      if (notes !== undefined) interview.notes = notes;
-      if (meetingLink !== undefined) interview.meetingLink = meetingLink;
+      if (typeof duration === 'number' && Number.isFinite(duration)) {
+        interview.duration = Math.min(480, Math.max(15, duration));
+      }
+      if (notes !== undefined) interview.notes = notes.trim();
+      if (type) {
+        interview.type = type === 'onsite' || type === 'in-person' ? 'in-person' : type;
+      }
+      if (meetingLink !== undefined) {
+        const trimmedMeetingValue = meetingLink.trim();
+        if (interview.type === 'in-person') {
+          interview.location = trimmedMeetingValue || interview.location;
+          interview.meetingLink = undefined;
+        } else {
+          interview.meetingLink = trimmedMeetingValue || undefined;
+        }
+      }
       if (date && time) {
-        interview.scheduledAt = new Date(`${date}T${time}`) as any;
+        const scheduledAt = new Date(`${date}T${time}`);
+        if (Number.isNaN(scheduledAt.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: 'Please select a valid interview date and time',
+          });
+        }
+        interview.scheduledAt = scheduledAt as any;
       }
     }
     await interview.save();
+
+    const relatedJob = await Job.findById(interview.jobId).select('title company');
+    const updateTitle = interview.status === 'cancelled' ? 'Interview cancelled' : 'Interview updated';
+    const updateDescription =
+      interview.status === 'cancelled'
+        ? `Your interview for ${relatedJob?.title || 'this job'} has been cancelled.`
+        : `Your interview for ${relatedJob?.title || 'this job'} is now ${interview.status} and scheduled for ${new Date(interview.scheduledAt).toLocaleString()}.`;
+
+    await createNotificationForUsers(
+      [interview.candidateId as any],
+      'interview-scheduled',
+      updateTitle,
+      updateDescription,
+      interview.jobId as any
+    );
 
     const populated = await Interview.findById(interview._id)
       .populate('jobId', 'title company location')

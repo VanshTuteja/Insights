@@ -26,12 +26,16 @@ interface Job {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  isExternal?: boolean;
+  source?: string;
+  applyUrl?: string;
 }
 
 interface JobFilters {
   search?: string;
   location?: string;
   type?: string;
+  salary?: string;
   salaryMin?: number;
   salaryMax?: number;
   tags?: string[];
@@ -53,7 +57,7 @@ interface JobState {
   };
   
   // Actions
-  fetchJobs: (filters?: JobFilters) => Promise<void>;
+  fetchJobs: (filters?: JobFilters, append?: boolean) => Promise<void>;
   fetchJobById: (id: string) => Promise<void>;
   createJob: (jobData: Partial<Job>) => Promise<void>;
   updateJob: (id: string, jobData: Partial<Job>) => Promise<void>;
@@ -77,7 +81,7 @@ export const useJobStore = create<JobState>((set, get) => ({
     pages: 0,
   },
 
-  fetchJobs: async (filters?: JobFilters) => {
+  fetchJobs: async (filters?: JobFilters, append = false) => {
     set({ isLoading: true, error: null });
     try {
       const params = new URLSearchParams();
@@ -85,6 +89,7 @@ export const useJobStore = create<JobState>((set, get) => ({
       if (filters?.search) params.append('search', filters.search);
       if (filters?.location) params.append('location', filters.location);
       if (filters?.type) params.append('type', filters.type);
+      if (filters?.salary) params.append('salary', filters.salary);
       if (filters?.salaryMin) params.append('salaryMin', filters.salaryMin.toString());
       if (filters?.salaryMax) params.append('salaryMax', filters.salaryMax.toString());
       if (filters?.tags?.length) params.append('tags', filters.tags.join(','));
@@ -94,11 +99,11 @@ export const useJobStore = create<JobState>((set, get) => ({
       const response = await axios.get(`/jobs?${params.toString()}`);
       const { jobs, pagination } = response.data.data;
       
-      set({ 
-        jobs, 
+      set((state) => ({ 
+        jobs: append ? [...state.jobs, ...jobs] : jobs, 
         pagination, 
         isLoading: false 
-      });
+      }));
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to fetch jobs';
       set({ error: errorMessage, isLoading: false });

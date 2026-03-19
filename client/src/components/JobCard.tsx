@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Clock, DollarSign, Bookmark, BookmarkCheck } from 'lucide-react';
+import { Loader2, MapPin, Clock, DollarSign, Bookmark, BookmarkCheck } from 'lucide-react';
 
 interface Job {
   id: string;
@@ -23,9 +23,10 @@ interface JobCardProps {
   onApply?: (jobId: string) => void;
   onViewDetails?: (job: Job) => void;
   isSaved?: boolean;
+  isApplying?: boolean;
 }
 
-const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, isSaved = false }) => {
+const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, isSaved = false, isApplying = false }) => {
   return (
     <motion.div
       whileHover={{ y: -4, scale: 1.02 }}
@@ -103,8 +104,16 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
               onClick={() => onApply?.(job.id)}
               className="flex-1 bg-primary hover:opacity-90 transition-opacity"
               size="sm"
+              disabled={isApplying}
             >
-              Apply Now
+              {isApplying ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Applying...
+                </>
+              ) : (
+                'Apply Now'
+              )}
             </Button>
             <Button 
               variant="outline" 

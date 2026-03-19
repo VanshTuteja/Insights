@@ -30,11 +30,11 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
       return;
     }
 
-    fetchNotifications(10, 1);
+    fetchNotifications(1, 1);
 
     const intervalId = setInterval(() => {
-      fetchNotifications(10, 1);
-    }, 10000);
+      fetchNotifications(1, 1);
+    }, 30000);
 
     return () => clearInterval(intervalId);
   }, [fetchNotifications, user?.role]);

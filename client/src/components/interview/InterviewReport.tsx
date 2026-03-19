@@ -13,6 +13,8 @@ import { Award, BarChart3, MessageSquareQuote, RotateCcw, Sparkles } from 'lucid
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import { SessionScores } from '@/lib/interviewApi';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
@@ -49,6 +51,9 @@ export default function InterviewReport({
   onRetake,
   onNewInterview,
 }: InterviewReportProps) {
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
   const radarData = useMemo(() => {
     const normalized = {
       relevance: scores.relevance ?? 0,
@@ -72,14 +77,14 @@ export default function InterviewReport({
             normalized.structure,
             normalized.clarity,
           ],
-          backgroundColor: 'rgba(14, 116, 144, 0.18)',
-          borderColor: 'rgb(14, 116, 144)',
+          backgroundColor: darkTheme ? 'hsl(var(--primary) / 0.28)' : 'hsl(var(--primary) / 0.18)',
+          borderColor: 'hsl(var(--primary))',
           borderWidth: 2,
-          pointBackgroundColor: 'rgb(14, 116, 144)',
+          pointBackgroundColor: 'hsl(var(--primary))',
         },
       ],
     };
-  }, [scores]);
+  }, [darkTheme, scores]);
 
   const chartOptions = useMemo(
     () => ({
@@ -87,17 +92,17 @@ export default function InterviewReport({
         r: {
           min: 0,
           max: 100,
-          ticks: { stepSize: 20 },
-          angleLines: { color: 'rgba(148, 163, 184, 0.35)' },
-          grid: { color: 'rgba(148, 163, 184, 0.25)' },
-          pointLabels: { color: 'rgb(51, 65, 85)' },
+          ticks: { stepSize: 20, color: 'hsl(var(--muted-foreground))', backdropColor: 'transparent' },
+          angleLines: { color: darkTheme ? 'hsl(var(--border) / 0.45)' : 'hsl(var(--border) / 0.8)' },
+          grid: { color: darkTheme ? 'hsl(var(--border) / 0.3)' : 'hsl(var(--border) / 0.65)' },
+          pointLabels: { color: 'hsl(var(--foreground))' },
         },
       },
       plugins: {
         legend: { display: false },
       },
     }),
-    []
+    [darkTheme]
   );
 
   const barItems = (Object.keys(SCORE_LABELS) as (keyof SessionScores)[]).map((key) => ({
@@ -107,26 +112,36 @@ export default function InterviewReport({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border bg-[linear-gradient(135deg,rgba(8,47,73,0.98),rgba(15,23,42,0.96))] px-6 py-7 text-white shadow-lg">
+      <div
+        className={cn(
+          'rounded-3xl border px-6 py-7 shadow-lg',
+          darkTheme
+            ? 'border-primary/20 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--card)/0.88)_100%)] text-foreground'
+            : 'border-primary/10 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--muted)/0.72)_100%)] text-foreground',
+        )}
+      >
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.25em] text-white/60">Interview Report</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Interview Report</p>
             <h2 className="text-3xl font-semibold">Professional performance summary</h2>
-            <p className="max-w-2xl text-sm text-white/70">
+            <p className="max-w-2xl text-sm text-muted-foreground">
               Review your score profile, speaking quality, and body-language outcome for the {category} round.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Theme: <span className="font-medium text-foreground">{themePreview.label}</span>
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-white/10 px-4 py-3">
-              <p className="text-xs text-white/60">Overall</p>
+            <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
+              <p className="text-xs text-muted-foreground">Overall</p>
               <p className="mt-1 text-2xl font-semibold">{overallScore}</p>
             </div>
-            <div className="rounded-2xl bg-white/10 px-4 py-3">
-              <p className="text-xs text-white/60">Confidence</p>
+            <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
+              <p className="text-xs text-muted-foreground">Confidence</p>
               <p className="mt-1 text-2xl font-semibold">{confidenceScore}</p>
             </div>
-            <div className="rounded-2xl bg-white/10 px-4 py-3">
-              <p className="text-xs text-white/60">Category</p>
+            <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
+              <p className="text-xs text-muted-foreground">Category</p>
               <p className="mt-1 text-base font-semibold">{category}</p>
             </div>
           </div>
@@ -134,7 +149,7 @@ export default function InterviewReport({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_360px]">
-        <Card className="border-slate-200 shadow-sm">
+        <Card className={cn('shadow-sm', darkTheme ? 'border-primary/15 bg-card/85' : 'border-slate-200')}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
@@ -149,7 +164,7 @@ export default function InterviewReport({
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 shadow-sm">
+        <Card className={cn('shadow-sm', darkTheme ? 'border-primary/15 bg-card/85' : 'border-slate-200')}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Award className="h-5 w-5" />
@@ -167,7 +182,7 @@ export default function InterviewReport({
                 <Progress value={value} className="h-2" />
               </div>
             ))}
-            <div className="rounded-2xl border bg-slate-50 p-4 text-xs text-muted-foreground">
+            <div className={cn('rounded-2xl border p-4 text-xs text-muted-foreground', darkTheme ? 'bg-background/55' : 'bg-slate-50')}>
               Relevance 25% | Communication 20% | Technical 20% | Confidence 15% | Structure 10% | Clarity 10%
             </div>
           </CardContent>
@@ -175,7 +190,7 @@ export default function InterviewReport({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-slate-200 shadow-sm">
+        <Card className={cn('shadow-sm', darkTheme ? 'border-primary/15 bg-card/85' : 'border-slate-200')}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
@@ -187,7 +202,7 @@ export default function InterviewReport({
             {strengths.length > 0 ? (
               <ul className="space-y-2 text-sm text-muted-foreground">
                 {strengths.map((item, index) => (
-                  <li key={index} className="rounded-xl border bg-slate-50 px-3 py-2">
+                  <li key={index} className={cn('rounded-xl border px-3 py-2', darkTheme ? 'bg-background/55' : 'bg-slate-50')}>
                     {item}
                   </li>
                 ))}
@@ -198,7 +213,7 @@ export default function InterviewReport({
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 shadow-sm">
+        <Card className={cn('shadow-sm', darkTheme ? 'border-primary/15 bg-card/85' : 'border-slate-200')}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <RotateCcw className="h-5 w-5" />
@@ -210,7 +225,7 @@ export default function InterviewReport({
             {improvements.length > 0 ? (
               <ul className="space-y-2 text-sm text-muted-foreground">
                 {improvements.map((item, index) => (
-                  <li key={index} className="rounded-xl border bg-slate-50 px-3 py-2">
+                  <li key={index} className={cn('rounded-xl border px-3 py-2', darkTheme ? 'bg-background/55' : 'bg-slate-50')}>
                     {item}
                   </li>
                 ))}
@@ -222,7 +237,7 @@ export default function InterviewReport({
         </Card>
       </div>
 
-      <Card className="border-slate-200 shadow-sm">
+      <Card className={cn('shadow-sm', darkTheme ? 'border-primary/15 bg-card/85' : 'border-slate-200')}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MessageSquareQuote className="h-5 w-5" />

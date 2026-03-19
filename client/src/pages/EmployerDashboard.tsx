@@ -343,20 +343,31 @@ const EmployerDashboard: React.FC = () => {
     setScheduleOpen(true);
   };
 
-  const handleScheduleInterview = async () => {
-    if (!scheduleCandidateId || !scheduleJobId || !scheduleDate || !scheduleTime) {
-      toast({
-        title: 'Missing details',
-        description: 'Please fill date, time and interview type.',
-        variant: 'destructive',
-      });
-      return;
-    }
+	  const handleScheduleInterview = async () => {
+	    if (!scheduleCandidateId || !scheduleJobId || !scheduleDate || !scheduleTime) {
+	      toast({
+	        title: 'Missing details',
+	        description: 'Please choose a candidate, job, date, time, and interview type.',
+	        variant: 'destructive',
+	      });
+	      return;
+	    }
 
-    try {
-      await axios.post('/interviews/schedule', {
-        jobId: scheduleJobId,
-        candidateId: scheduleCandidateId,
+	    if ((scheduleType === 'video' || scheduleType === 'phone') && !scheduleLink.trim()) {
+	      toast({
+	        title: 'Missing meeting details',
+	        description: scheduleType === 'video'
+	          ? 'Please add a meeting link for the video interview.'
+	          : 'Please add phone or meeting details for the phone interview.',
+	        variant: 'destructive',
+	      });
+	      return;
+	    }
+
+	    try {
+	      await axios.post('/interviews/schedule', {
+	        jobId: scheduleJobId,
+	        candidateId: scheduleCandidateId,
         date: scheduleDate,
         time: scheduleTime,
         type: scheduleType,
@@ -364,10 +375,10 @@ const EmployerDashboard: React.FC = () => {
         notes: scheduleNotes,
       });
 
-      toast({
-        title: 'Interview scheduled',
-        description: 'The candidate has been invited.',
-      });
+	      toast({
+	        title: 'Interview scheduled',
+	        description: 'The candidate has been invited.',
+	      });
       await loadData();
       setScheduleOpen(false);
       setCandidateDetailsOpen(false);
@@ -700,13 +711,13 @@ const EmployerDashboard: React.FC = () => {
               <option value="phone">Phone</option>
               <option value="onsite">Onsite</option>
             </select>
-            <input
-              type="text"
-              className="w-full border rounded px-2 py-1 text-sm bg-background"
-              placeholder="Meeting link or location"
-              value={scheduleLink}
-              onChange={(e) => setScheduleLink(e.target.value)}
-            />
+	            <input
+	              type="text"
+	              className="w-full border rounded px-2 py-1 text-sm bg-background"
+	              placeholder={scheduleType === 'onsite' ? 'Office address or meeting location' : scheduleType === 'phone' ? 'Phone number or call details' : 'Meeting link'}
+	              value={scheduleLink}
+	              onChange={(e) => setScheduleLink(e.target.value)}
+	            />
             <textarea
               className="w-full border rounded px-2 py-1 text-sm bg-background min-h-[60px]"
               placeholder="Notes for the candidate (optional)"

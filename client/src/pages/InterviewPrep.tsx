@@ -6,8 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/authStore';
+import { cn } from '@/lib/utils';
 import { useFaceMetrics } from '@/hooks/useFaceMetrics';
 import { interviewApi, type DifficultyLevel, type Evaluation, type InterviewCategory, type QuestionItem } from '@/lib/interviewApi';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import {
   AlertCircle,
   Camera,
@@ -63,6 +65,9 @@ function hasUsableTracks(stream: MediaStream | null) {
 
 export default function InterviewPrep() {
   const { user } = useAuthStore();
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [category, setCategory] = useState<InterviewCategory | null>(null);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('intermediate');
@@ -97,6 +102,19 @@ export default function InterviewPrep() {
   const currentQuestion = questions[currentIndex];
   const isLastQuestion = currentIndex >= questions.length - 1;
   const latestSession = history[0] ?? null;
+  const pageShellStyle = {
+    backgroundImage: darkTheme
+      ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.2), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.14), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.95) 100%)'
+      : 'radial-gradient(circle at top left, hsl(var(--primary) / 0.1), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.16), transparent 22%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.74) 52%, hsl(var(--background)) 100%)',
+  };
+  const sectionCardClass = cn(
+    'border shadow-premium-lg backdrop-blur',
+    darkTheme ? 'border-primary/15 bg-card/80' : 'border-border/80 bg-card/95',
+  );
+  const mutedPanelClass = cn(
+    'rounded-2xl border p-4',
+    darkTheme ? 'border-border/60 bg-background/50' : 'border-border bg-slate-50',
+  );
 
   useEffect(() => {
     if (!isRecording || timeRemaining <= 0) return;
@@ -361,28 +379,38 @@ export default function InterviewPrep() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={pageShellStyle}>
       <AnimatedSection>
-        <div className="rounded-3xl border bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,41,59,0.94))] px-6 py-8 text-white shadow-xl">
+        <div
+          className={cn(
+            'rounded-3xl border px-6 py-8 shadow-xl',
+            darkTheme
+              ? 'border-primary/20 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--card)/0.86)_100%)] text-foreground'
+              : 'border-primary/10 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--muted)/0.72)_100%)] text-foreground',
+          )}
+        >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.25em] text-white/55">Interview Studio</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Interview Studio</p>
               <h1 className="text-3xl font-semibold">AI Interview Preparation</h1>
-              <p className="max-w-2xl text-sm text-white/70">
+              <p className="max-w-2xl text-sm text-muted-foreground">
                 Practice realistic interviews with a more reliable recorder, audio fallback, live coaching, and face metrics that only score when they truly detect you.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Theme: <span className="font-medium text-foreground">{themePreview.label}</span>
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl bg-white/8 px-4 py-3">
-                <p className="text-xs text-white/60">Recorder</p>
+              <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
+                <p className="text-xs text-muted-foreground">Recorder</p>
                 <p className="mt-1 text-sm font-medium">{recordingMode === 'video' ? 'Video + audio' : 'Audio only'}</p>
               </div>
-              <div className="rounded-2xl bg-white/8 px-4 py-3">
-                <p className="text-xs text-white/60">Face tracking</p>
+              <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
+                <p className="text-xs text-muted-foreground">Face tracking</p>
                 <p className="mt-1 text-sm font-medium">{sampleCount > 0 ? `${sampleCount} samples` : 'Not locked'}</p>
               </div>
-              <div className="rounded-2xl bg-white/8 px-4 py-3">
-                <p className="text-xs text-white/60">Time per answer</p>
+              <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
+                <p className="text-xs text-muted-foreground">Time per answer</p>
                 <p className="mt-1 text-sm font-medium">{QUESTION_TIME_LIMIT} seconds</p>
               </div>
             </div>
@@ -406,7 +434,7 @@ export default function InterviewPrep() {
 
       <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <AnimatedSection delay={0.15}>
-          <Card className="border-slate-200 shadow-sm">
+          <Card className={sectionCardClass}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5" />
@@ -415,7 +443,7 @@ export default function InterviewPrep() {
               <CardDescription>Choose your track, difficulty, and device permissions.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-2xl border bg-slate-50 p-4">
+              <div className={mutedPanelClass}>
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-medium">Permissions</span>
                   <Badge variant={permissionState === 'granted' ? 'default' : permissionState === 'fallback-audio' ? 'secondary' : 'outline'}>
@@ -461,7 +489,7 @@ export default function InterviewPrep() {
                     whileHover={{ scale: sessionId && !sessionComplete ? 1 : 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className={`cursor-pointer rounded-xl border p-3 transition-all ${
-                      category === item.name ? 'border-primary bg-primary/5' : 'hover:border-primary/40'
+                      category === item.name ? 'border-primary bg-primary/8' : darkTheme ? 'hover:border-primary/30 hover:bg-background/45' : 'hover:border-primary/40'
                     } ${sessionId && !sessionComplete ? 'cursor-not-allowed opacity-70' : ''}`}
                     onClick={() => {
                       if (!sessionId && !loadingQuestions) void startInterview(item.name);
@@ -476,7 +504,7 @@ export default function InterviewPrep() {
               </div>
 
                 <div className="space-y-3 border-t pt-4">
-                  <div className="rounded-2xl border bg-slate-50 p-4">
+                  <div className={mutedPanelClass}>
                     <h4 className="mb-2 flex items-center gap-2 font-medium">
                       <ShieldCheck className="h-4 w-4" />
                       Session guidance
@@ -496,22 +524,22 @@ export default function InterviewPrep() {
                   {!latestSession ? (
                     <p className="text-xs text-muted-foreground">Your latest completed interview report will appear here after you finish one session.</p>
                   ) : (
-                    <div className="space-y-3 rounded-2xl border bg-slate-50 p-4">
+                    <div className={mutedPanelClass}>
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-slate-900">{latestSession.category}</p>
+                          <p className="text-sm font-medium text-foreground">{latestSession.category}</p>
                           <p className="text-xs text-muted-foreground capitalize">{latestSession.difficulty} interview</p>
                         </div>
                         <Badge variant="outline">{latestSession.overallScore ?? '-'} / 100</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="rounded-xl border bg-white px-3 py-2">
+                        <div className={cn('rounded-xl border px-3 py-2', darkTheme ? 'bg-background/60' : 'bg-white')}>
                           <p className="text-muted-foreground">Confidence</p>
-                          <p className="mt-1 font-semibold text-slate-900">{latestSession.confidenceScore ?? '-'} / 100</p>
+                          <p className="mt-1 font-semibold text-foreground">{latestSession.confidenceScore ?? '-'} / 100</p>
                         </div>
-                        <div className="rounded-xl border bg-white px-3 py-2">
+                        <div className={cn('rounded-xl border px-3 py-2', darkTheme ? 'bg-background/60' : 'bg-white')}>
                           <p className="text-muted-foreground">Questions</p>
-                          <p className="mt-1 font-semibold text-slate-900">{latestSession.questions?.length ?? 0}</p>
+                          <p className="mt-1 font-semibold text-foreground">{latestSession.questions?.length ?? 0}</p>
                         </div>
                       </div>
                     </div>
@@ -530,25 +558,28 @@ export default function InterviewPrep() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="rounded-3xl border bg-gradient-to-br from-slate-50 to-white p-10 text-center shadow-sm"
+                className={cn(
+                  'rounded-3xl border p-10 text-center shadow-sm',
+                  darkTheme ? 'border-primary/15 bg-gradient-to-br from-card to-background/70' : 'border-border bg-gradient-to-br from-slate-50 to-white',
+                )}
               >
-                <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-slate-700">
-                  <Play className="ml-1 h-12 w-12 text-white" />
+                <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent">
+                  <Play className="ml-1 h-12 w-12 text-primary-foreground" />
                 </div>
                 <h3 className="mb-2 text-xl font-semibold">Ready to start a mock interview?</h3>
                 <p className="mx-auto mb-6 max-w-2xl text-muted-foreground">
                   Select a category on the left to generate five AI interview questions. Each answer is reviewed using your recorded response, transcript, and live video metrics when available.
                 </p>
                 <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-2xl border bg-white p-4 text-left">
+                    <div className={cn('rounded-2xl border p-4 text-left', darkTheme ? 'bg-background/60' : 'bg-white')}>
                     <p className="font-medium">Reliable multi-question flow</p>
                     <p className="mt-1 text-sm text-muted-foreground">Each question resets cleanly so you can record, submit, and continue without recorder errors.</p>
                   </div>
-                  <div className="rounded-2xl border bg-white p-4 text-left">
+                  <div className={cn('rounded-2xl border p-4 text-left', darkTheme ? 'bg-background/60' : 'bg-white')}>
                     <p className="font-medium">Real response analysis</p>
                     <p className="mt-1 text-sm text-muted-foreground">Feedback is based on your recorded answer and video metrics, with fallback data only when a service actually fails.</p>
                   </div>
-                  <div className="rounded-2xl border bg-white p-4 text-left">
+                  <div className={cn('rounded-2xl border p-4 text-left', darkTheme ? 'bg-background/60' : 'bg-white')}>
                     <p className="font-medium">Saved latest performance</p>
                     <p className="mt-1 text-sm text-muted-foreground">Your latest completed interview remains visible as your current benchmark.</p>
                   </div>
@@ -573,27 +604,27 @@ export default function InterviewPrep() {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <Badge variant="secondary">Question {currentIndex + 1} of {questions.length}</Badge>
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-2xl border bg-white p-3">
+                    <div className={cn('rounded-2xl border p-3', darkTheme ? 'bg-background/60' : 'bg-white')}>
                       <p className="text-xs text-muted-foreground">Timer</p>
                       <div className="mt-1 flex items-center gap-2">
                         <Clock className={`h-4 w-4 ${timeRemaining < 20 ? 'text-destructive' : 'text-muted-foreground'}`} />
-                        <span className={timeRemaining < 20 ? 'font-semibold text-destructive' : 'font-semibold text-slate-900'}>
+                        <span className={timeRemaining < 20 ? 'font-semibold text-destructive' : 'font-semibold text-foreground'}>
                           {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
                         </span>
                       </div>
                     </div>
-                    <div className="rounded-2xl border bg-white p-3">
+                    <div className={cn('rounded-2xl border p-3', darkTheme ? 'bg-background/60' : 'bg-white')}>
                       <p className="text-xs text-muted-foreground">Mode</p>
-                      <p className="mt-1 font-semibold text-slate-900">{recordingMode === 'video' ? 'Video + audio' : 'Audio only'}</p>
+                      <p className="mt-1 font-semibold text-foreground">{recordingMode === 'video' ? 'Video + audio' : 'Audio only'}</p>
                     </div>
-                    <div className="rounded-2xl border bg-white p-3">
+                    <div className={cn('rounded-2xl border p-3', darkTheme ? 'bg-background/60' : 'bg-white')}>
                       <p className="text-xs text-muted-foreground">Face samples</p>
-                      <p className="mt-1 font-semibold text-slate-900">{sampleCount}</p>
+                      <p className="mt-1 font-semibold text-foreground">{sampleCount}</p>
                     </div>
                   </div>
                 </div>
 
-                <Card className="bg-muted/30">
+                <Card className={cn(sectionCardClass, 'bg-muted/30')}>
                   <CardContent className="p-6">
                     <p className="text-lg leading-relaxed">{currentQuestion.text}</p>
                   </CardContent>
@@ -658,7 +689,7 @@ export default function InterviewPrep() {
                   </div>
 
                   <div className="space-y-4">
-                    <Card className="border-slate-200 shadow-sm">
+                    <Card className={sectionCardClass}>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-base">
                           <Sparkles className="h-4 w-4" />
@@ -680,13 +711,13 @@ export default function InterviewPrep() {
                             </div>
                           ))
                         ) : (
-                          <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">
+                          <div className={cn(mutedPanelClass, 'text-sm text-muted-foreground')}>
                             {recordingMode === 'audio'
                               ? 'Audio-only mode is active. Live visual scoring is paused for this answer.'
                               : 'Start speaking and keep your face visible to build live coaching scores.'}
                           </div>
                         )}
-                        <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">
+                        <div className={cn(mutedPanelClass, 'text-sm text-muted-foreground')}>
                           <p>{performanceStatus.confidence}</p>
                           <p className="mt-2">{performanceStatus.eyeContact}</p>
                           <p className="mt-2">{performanceStatus.engagement}</p>
@@ -694,7 +725,7 @@ export default function InterviewPrep() {
                       </CardContent>
                     </Card>
 
-                    <Card className="border-slate-200 shadow-sm">
+                    <Card className={sectionCardClass}>
                       <CardHeader>
                         <CardTitle className="text-base">Answer checklist</CardTitle>
                       </CardHeader>
@@ -719,8 +750,8 @@ export default function InterviewPrep() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {lastTranscript ? (
-                        <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">
-                          <strong className="text-slate-900">Transcript preview:</strong> {lastTranscript.slice(0, 320)}
+                        <div className={cn(mutedPanelClass, 'text-sm text-muted-foreground')}>
+                          <strong className="text-foreground">Transcript preview:</strong> {lastTranscript.slice(0, 320)}
                           {lastTranscript.length > 320 ? '...' : ''}
                         </div>
                       ) : null}

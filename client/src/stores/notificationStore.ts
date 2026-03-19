@@ -63,7 +63,12 @@ export const useNotificationStore = create<NotificationState>((set) => ({
                 notifications: state.notifications.map(n =>
                     n._id === notificationId ? { ...n, read: true } : n
                 ),
-                unreadCount: Math.max(0, state.unreadCount - 1)
+                unreadCount: Math.max(
+                    0,
+                    state.notifications.some((n) => n._id === notificationId && !n.read)
+                        ? state.unreadCount - 1
+                        : state.unreadCount,
+                )
             }));
         } catch (error: unknown) {
             const errorMessage = getErrorMessage(error, 'Failed to mark notification as read');
@@ -89,6 +94,12 @@ export const useNotificationStore = create<NotificationState>((set) => ({
             await axios.delete(`${API_BASE_URL}/notifications/${notificationId}`);
             set(state => ({
                 notifications: state.notifications.filter(n => n._id !== notificationId),
+                unreadCount: Math.max(
+                    0,
+                    state.notifications.some((n) => n._id === notificationId && !n.read)
+                        ? state.unreadCount - 1
+                        : state.unreadCount,
+                ),
             }));
         } catch (error: unknown) {
             const errorMessage = getErrorMessage(error, 'Failed to delete notification');

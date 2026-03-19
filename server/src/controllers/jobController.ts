@@ -6,6 +6,7 @@ import Application from '../models/Application';
 import { createNotificationForUsers } from './notificationController';
 import { AuthRequest, ApiResponse } from '../types';
 import logger from '../utils/logger';
+import { fetchAdzunaJobs } from '../services/adzunaService';
 
 function normalizeText(value: string): string {
   return value.trim().toLowerCase();
@@ -78,23 +79,62 @@ export const getJobs = async (req: Request, res: Response) => {
       query.tags = { $in: tagArray };
     }
 
-    const jobs = await Job.find(query)
+    const localJobs = await Job.find(query)
       .populate('employerId', 'name company')
-      .sort({ createdAt: -1 })
-      .limit(Number(limit) * 1)
-      .skip((Number(page) - 1) * Number(limit));
+      .sort({ createdAt: -1 });
 
-    const total = await Job.countDocuments(query);
+    const localTotal = await Job.countDocuments(query);
+    const requestedPage = Number(page);
+    const requestedLimit = Number(limit);
+    const offset = (requestedPage - 1) * requestedLimit;
+
+    const externalOffset = Math.max(0, offset - localTotal);
+    const externalPage = Math.floor(externalOffset / requestedLimit) + 1;
+    const externalOffsetInWindow = externalOffset % requestedLimit;
+
+    let externalJobs: any[] = [];
+    let externalTotal = 0;
+
+    try {
+      const [firstExternal, secondExternal] = await Promise.all([
+        fetchAdzunaJobs({
+          search: search as string | undefined,
+          location: location as string | undefined,
+          type: type as string | undefined,
+          salary: salary as string | undefined,
+          page: externalPage,
+          limit: requestedLimit,
+        }),
+        fetchAdzunaJobs({
+          search: search as string | undefined,
+          location: location as string | undefined,
+          type: type as string | undefined,
+          salary: salary as string | undefined,
+          page: externalPage + 1,
+          limit: requestedLimit,
+        }),
+      ]);
+
+      externalTotal = firstExternal.total;
+      externalJobs = [...firstExternal.jobs, ...secondExternal.jobs];
+      externalJobs = externalJobs.slice(externalOffsetInWindow, externalOffsetInWindow + requestedLimit);
+    } catch (externalError: any) {
+      logger.warn('External job fetch failed', { error: externalError.message });
+    }
+
+    const combinedJobs = [...localJobs, ...externalJobs];
+    const paginatedJobs = combinedJobs.slice(offset, offset + requestedLimit);
+    const total = localTotal + externalTotal;
 
     res.json({
       success: true,
       data: {
-        jobs,
+        jobs: paginatedJobs,
         pagination: {
-          page: Number(page),
-          limit: Number(limit),
+          page: requestedPage,
+          limit: requestedLimit,
           total,
-          pages: Math.ceil(total / Number(limit))
+          pages: Math.ceil(total / requestedLimit)
         }
       }
     });
@@ -380,6 +420,16 @@ export const applyToJob = async (req: AuthRequest, res: Response) => {
         }
       }
     });
+
+    if (job.employerId) {
+      await createNotificationForUsers(
+        [job.employerId],
+        'application-update',
+        'New application received',
+        `A candidate has applied for ${job.title} at ${job.company || 'your company'}.`,
+        job._id
+      );
+    }
 
     return res.json({
       success: true,

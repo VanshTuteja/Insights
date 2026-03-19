@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, DollarSign, Clock } from 'lucide-react';
+import { Loader2, MapPin, DollarSign, Clock } from 'lucide-react';
 
 interface Job {
   id: string;
@@ -34,6 +34,7 @@ interface JobDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
   onApply: (jobId: string) => void;
   onSave: (jobId: string) => void;
+  isApplying?: boolean;
 }
 
 const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
@@ -42,6 +43,7 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
   onOpenChange,
   onApply,
   onSave,
+  isApplying = false,
 }) => {
   if (!job) return null;
 
@@ -174,8 +176,16 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
               onClick={() => onApply(String(job.id))}
               className="flex-1 bg-gradient-to-r from-primary to-secondary"
               size="lg"
+              disabled={isApplying}
             >
-              Apply Now
+              {isApplying ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Applying...
+                </>
+              ) : (
+                'Apply Now'
+              )}
             </Button>
             <Button onClick={() => onSave(String(job.id))} variant="outline" size="lg">
               Save Job
