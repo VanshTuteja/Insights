@@ -582,9 +582,9 @@ const EmployerDashboard: React.FC = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">
                         <h4 className="font-semibold">{application.candidateName}</h4>
-                        <Badge variant="outline" className="text-green-600 border-green-600">
+                        {/* <Badge variant="outline" className="text-green-600 border-green-600">
                           {application.match}% match
-                        </Badge>
+                        </Badge> */}
                       </div>
                       <p className="text-sm text-muted-foreground">{application.position}</p>
                       <p className="text-xs text-muted-foreground">Applied {application.applied}</p>
@@ -596,12 +596,12 @@ const EmployerDashboard: React.FC = () => {
                         >
                           View
                         </Button>
-                        <Button 
+                        {/* <Button 
                           size="sm"
                           onClick={() => handleContactCandidate()}
                         >
                           Contact
-                        </Button>
+                        </Button> */}
                       </div>
                     </div>
                   </motion.div>

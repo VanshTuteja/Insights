@@ -229,7 +229,7 @@ const EmployerAnalyticsView: React.FC<EmployerAnalyticsViewProps> = ({
             <div className={metricCardClass}>
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-medium text-foreground">Most viewed role</span>
-                <Eye className="h-4 w-4 text-primary" />
+                {/* <Eye className="h-4 w-4 text-primary" /> */}
               </div>
               <p className="text-foreground/80">
                 {jobsWithMetrics.sort((a, b) => (b.views || 0) - (a.views || 0))[0]?.title || 'No jobs yet'}

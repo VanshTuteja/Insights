@@ -226,13 +226,13 @@ const Interviews: React.FC = () => {
               Join Interview
             </Button>
           )}
-          <Button 
+          {/* <Button 
             size="sm" 
             variant="outline"
             onClick={() => handleReschedule(interview.id)}
           >
             Reschedule
-          </Button>
+          </Button> */}
           <Button 
             size="sm" 
             variant="outline"

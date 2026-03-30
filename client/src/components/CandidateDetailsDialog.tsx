@@ -73,9 +73,9 @@ const CandidateDetailsDialog: React.FC<CandidateDetailsDialogProps> = ({
                 Applied for {candidate.position}
               </DialogDescription>
               <div className="flex items-center space-x-2 mt-2">
-                <Badge variant="outline" className="text-green-600 border-green-600">
+                {/* <Badge variant="outline" className="text-green-600 border-green-600">
                   {candidate.match}% match
-                </Badge>
+                </Badge> */}
                 <Badge variant="secondary">{candidate.applied}</Badge>
               </div>
             </div>
@@ -84,7 +84,7 @@ const CandidateDetailsDialog: React.FC<CandidateDetailsDialogProps> = ({
 
         <div className="space-y-6">
           {/* Contact Information */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div className="flex items-center space-x-2">
               <Mail className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">{candidate.email || 'Not provided'}</span>
@@ -163,14 +163,14 @@ const CandidateDetailsDialog: React.FC<CandidateDetailsDialogProps> = ({
 
           {/* Action Buttons */}
           <div className="flex space-x-4 pt-6">
-            <Button 
+            {/* <Button 
               onClick={() => onContact(candidate.id)}
               className="flex-1 bg-gradient-to-r from-primary to-secondary"
               size="lg"
             >
               <MessageCircle className="h-4 w-4 mr-2" />
               Contact Candidate
-            </Button>
+            </Button> */}
             <Button
               variant="outline"
               size="lg"

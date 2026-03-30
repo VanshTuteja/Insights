@@ -20,53 +20,53 @@ const TestimonialCarousel: React.FC = () => {
 
 
 
-  const testimonials: TestimonialItem[] = [
-    {
-      id: '1',
-      name: 'Sarah Chen',
-      role: 'Senior Developer',
-      company: 'TechCorp',
-      content: 'This platform has revolutionized our workflow. The interface is intuitive and the features are exactly what we needed.',
-      rating: 5,
-      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b000?w=100&h=100&fit=crop&crop=face'
-    },
-    {
-      id: '2',
-      name: 'Michael Rodriguez',
-      role: 'Product Manager',
-      company: 'InnovateLab',
-      content: 'Outstanding experience! The team support is exceptional and the results speak for themselves. Highly recommended.',
-      rating: 5,
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face'
-    },
-    {
-      id: '3',
-      name: 'Emily Thompson',
-      role: 'Design Lead',
-      company: 'CreativeStudio',
-      content: 'The attention to detail and user experience is phenomenal. It has streamlined our design process significantly.',
-      rating: 5,
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face'
-    },
-    {
-      id: '4',
-      name: 'David Kim',
-      role: 'CTO',
-      company: 'StartupXYZ',
-      content: 'A game-changer for our startup. The scalability and performance exceeded our expectations from day one.',
-      rating: 5,
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face'
-    },
-    {
-      id: '5',
-      name: 'Lisa Johnson',
-      role: 'Marketing Director',
-      company: 'GrowthCo',
-      content: 'Incredible ROI and user engagement. Our metrics have improved across the board since implementation.',
-      rating: 5,
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&h=100&fit=crop&crop=face'
-    }
-  ];
+ const testimonials: TestimonialItem[] = [
+  {
+    id: '1',
+    name: 'Aarav Sharma',
+    role: 'Software Engineer',
+    company: 'Infosys',
+    content: 'This platform made my job search so much easier. The AI recommendations were surprisingly accurate and saved me a lot of time.',
+    rating: 5,
+    avatar: 'https://randomuser.me/api/portraits/men/32.jpg'
+  },
+  {
+    id: '2',
+    name: 'Priya Verma',
+    role: 'Product Manager',
+    company: 'Zomato',
+    content: 'Loved the resume builder! It gave real-time suggestions that actually improved my chances of getting shortlisted.',
+    rating: 5,
+    avatar: 'https://randomuser.me/api/portraits/women/44.jpg'
+  },
+  {
+    id: '3',
+    name: 'Rohit Gupta',
+    role: 'Frontend Developer',
+    company: 'TCS',
+    content: 'The mock interview feature is amazing. It helped me gain confidence before my actual interviews.',
+    rating: 5,
+    avatar: 'https://randomuser.me/api/portraits/men/65.jpg'
+  },
+  {
+    id: '4',
+    name: 'Sneha Iyer',
+    role: 'UI/UX Designer',
+    company: 'Freshworks',
+    content: 'Clean UI and very easy to use. I especially liked the career insights—it helped me understand salary trends better.',
+    rating: 5,
+    avatar: 'https://randomuser.me/api/portraits/women/68.jpg'
+  },
+  {
+    id: '5',
+    name: 'Karan Mehta',
+    role: 'Data Analyst',
+    company: 'Wipro',
+    content: 'One of the best platforms for freshers and professionals. It really helped me land better opportunities.',
+    rating: 5,
+    avatar: 'https://randomuser.me/api/portraits/men/75.jpg'
+  }
+];
 
 
   const nextSlide = () => {

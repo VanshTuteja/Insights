@@ -13,12 +13,12 @@ const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const { theme, setTheme, themes } = useThemeStore();
 
-  const navItems = [
-    { label: 'Features', href: '#features' },
-    { label: 'How It Works', href: '#how-it-works' },
-    { label: 'Testimonials', href: '#testimonials' },
-    { label: 'Pricing', href: '#pricing' },
-  ];
+  // const navItems = [
+  //   { label: 'Features', href: '#features' },
+  //   { label: 'How It Works', href: '#how-it-works' },
+  //   { label: 'Testimonials', href: '#testimonials' },
+  //   { label: 'Pricing', href: '#pricing' },
+  // ];
 
   // Close dropdown when clicking outside
   React.useEffect(() => {
@@ -67,7 +67,7 @@ const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-6">
+          {/* <div className="hidden md:flex items-center space-x-6">
             {navItems.map(({ label, href }) => (
               <a
                 key={label}
@@ -77,7 +77,7 @@ const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
                 {label}
               </a>
             ))}
-          </div>
+          </div> */}
 
           <div className="flex items-center space-x-4">
             {/* Theme Selector */}
@@ -157,7 +157,7 @@ const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
             exit={{ opacity: 0, height: 0 }}
             className="md:hidden border-t py-4"
           >
-            <div className="flex flex-col space-y-4">
+            {/* <div className="flex flex-col space-y-4">
               {navItems.map(({ label, href }) => (
                 <a
                   key={label}
@@ -179,7 +179,7 @@ const LandingNavbar: React.FC<LandingNavbarProps> = ({ onAuthOpen }) => {
                   Get Started
                 </Button>
               </div>
-            </div>
+            </div> */}
           </motion.div>
         )}
       </div>
