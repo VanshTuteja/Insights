@@ -5,12 +5,15 @@ import Application from '../models/Application';
 import User from '../models/Users';
 import { AuthRequest } from '../types';
 import { createNotificationForUsers } from './notificationController';
+import mongoose from 'mongoose';
+import { sendInterviewLifecycleEmails } from '../utils/interviewEmailService';
 
 export const scheduleInterview = async (req: AuthRequest, res: Response) => {
   try {
     const {
       jobId,
       candidateId,
+      applicationId,
       date,
       time,
       type,
@@ -20,6 +23,7 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
     } = req.body as {
       jobId?: string;
       candidateId?: string;
+      applicationId?: string;
       date?: string;
       time?: string;
       type?: 'video' | 'phone' | 'onsite' | 'in-person';
@@ -30,10 +34,10 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
 
     const employerId = req.user?.userId;
 
-    if (!jobId || !candidateId || !date || !time || !type) {
+    if (!jobId || (!candidateId && !applicationId) || !date || !time || !type) {
       return res.status(400).json({
         success: false,
-        message: 'jobId, candidateId, date, time and type are required',
+        message: 'jobId, candidateId or applicationId, date, time and type are required',
       });
     }
 
@@ -52,19 +56,37 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const candidate = await User.findById(candidateId).select('_id name email');
-    if (!candidate || candidate.role !== 'jobseeker') {
-      return res.status(404).json({
-        success: false,
-        message: 'Candidate not found',
-      });
+    let application = null;
+    if (applicationId && mongoose.Types.ObjectId.isValid(applicationId)) {
+      application = await Application.findById(applicationId);
     }
 
-    const application = await Application.findOne({ jobId, candidateId });
+    if (!application && candidateId && mongoose.Types.ObjectId.isValid(candidateId)) {
+      application = await Application.findOne({ jobId, candidateId });
+    }
+
     if (!application) {
       return res.status(400).json({
         success: false,
         message: 'This candidate has not applied to the selected job',
+      });
+    }
+
+    const resolvedCandidateId = application.candidateId.toString();
+    const resolvedJobId = application.jobId.toString();
+
+    if (resolvedJobId !== job._id.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selected application does not belong to this job',
+      });
+    }
+
+    const candidate = await User.findById(resolvedCandidateId).select('_id name email role');
+    if (!candidate || candidate.role !== 'jobseeker') {
+      return res.status(404).json({
+        success: false,
+        message: 'Candidate not found',
       });
     }
 
@@ -90,19 +112,28 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const interview = new Interview({
+    const existingInterview = await Interview.findOne({
+      jobId: new mongoose.Types.ObjectId(jobId),
+      candidateId: new mongoose.Types.ObjectId(resolvedCandidateId),
+      status: { $in: ['scheduled', 'rescheduled'] },
+    });
+
+    const interview = existingInterview || new Interview({
       jobId,
-      candidateId,
+      candidateId: resolvedCandidateId,
       interviewerId: employerId,
       employerId,
-      scheduledAt,
-      duration: normalizedDuration,
-      type: mappedType,
-      status: 'scheduled',
-      notes: notes?.trim(),
-      meetingLink: mappedType === 'in-person' ? undefined : trimmedMeetingValue || undefined,
-      location: mappedType === 'in-person' ? trimmedMeetingValue || job.location : undefined,
     });
+
+    interview.scheduledAt = scheduledAt;
+    interview.duration = normalizedDuration;
+    interview.type = mappedType;
+    interview.status = existingInterview ? 'rescheduled' : 'scheduled';
+    interview.notes = notes?.trim();
+    interview.meetingLink = mappedType === 'in-person' ? undefined : trimmedMeetingValue || undefined;
+    interview.location = mappedType === 'in-person' ? trimmedMeetingValue || job.location : undefined;
+    interview.candidateReminderSent = false;
+    interview.employerReminderSent = false;
 
     await interview.save();
 
@@ -119,10 +150,28 @@ export const scheduleInterview = async (req: AuthRequest, res: Response) => {
       job._id
     );
 
+    const employer = await User.findById(employerId).select('name email');
+
+    await sendInterviewLifecycleEmails({
+      candidateId: resolvedCandidateId,
+      employerId,
+      candidateName: candidate.name,
+      employerName: employer?.name || 'Employer',
+      jobTitle: job.title,
+      company: job.company || 'the company',
+      scheduledAt,
+      duration: normalizedDuration,
+      type: mappedType,
+      notes: notes?.trim(),
+      meetingLink: mappedType === 'in-person' ? undefined : trimmedMeetingValue || undefined,
+      location: mappedType === 'in-person' ? trimmedMeetingValue || job.location : undefined,
+      action: existingInterview ? 'rescheduled' : 'scheduled',
+    });
+
     const populated = await Interview.findById(interview._id)
       .populate('jobId', 'title company location')
-      .populate('candidateId', 'name email')
-      .populate('interviewerId', 'name email');
+      .populate('candidateId', 'name email avatar')
+      .populate('interviewerId', 'name email avatar jobTitle');
 
     return res.status(201).json({
       success: true,
@@ -145,7 +194,7 @@ export const getCandidateInterviews = async (req: AuthRequest, res: Response) =>
     const interviews = await Interview.find({ candidateId })
       .sort({ scheduledAt: -1 })
       .populate('jobId', 'title company location')
-      .populate('interviewerId', 'name email');
+      .populate('interviewerId', 'name email avatar jobTitle');
 
     return res.json({
       success: true,
@@ -167,7 +216,7 @@ export const getEmployerInterviews = async (req: AuthRequest, res: Response) => 
     const interviews = await Interview.find({ interviewerId: employerId })
       .sort({ scheduledAt: -1 })
       .populate('jobId', 'title company location')
-      .populate('candidateId', 'name email');
+      .populate('candidateId', 'name email avatar');
 
     return res.json({
       success: true,
@@ -254,7 +303,21 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
     }
     await interview.save();
 
+    if (interview.status === 'cancelled') {
+      await Application.findOneAndUpdate(
+        { jobId: interview.jobId, candidateId: interview.candidateId },
+        { $set: { status: 'Shortlisted' } }
+      );
+    } else if (interview.status === 'scheduled' || interview.status === 'rescheduled') {
+      await Application.findOneAndUpdate(
+        { jobId: interview.jobId, candidateId: interview.candidateId },
+        { $set: { status: 'Interview Scheduled' } }
+      );
+    }
+
     const relatedJob = await Job.findById(interview.jobId).select('title company');
+    const candidate = await User.findById(interview.candidateId).select('name email');
+    const employer = await User.findById(interview.interviewerId).select('name email');
     const updateTitle = interview.status === 'cancelled' ? 'Interview cancelled' : 'Interview updated';
     const updateDescription =
       interview.status === 'cancelled'
@@ -268,6 +331,28 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
       updateDescription,
       interview.jobId as any
     );
+
+    if (interview.status === 'scheduled' || interview.status === 'rescheduled') {
+      interview.candidateReminderSent = false;
+      interview.employerReminderSent = false;
+      await interview.save();
+    }
+
+    await sendInterviewLifecycleEmails({
+      candidateId: interview.candidateId,
+      employerId: interview.interviewerId,
+      candidateName: candidate?.name || 'Candidate',
+      employerName: employer?.name || 'Employer',
+      jobTitle: relatedJob?.title || 'Interview',
+      company: relatedJob?.company || 'the company',
+      scheduledAt: new Date(interview.scheduledAt),
+      duration: interview.duration,
+      type: interview.type,
+      notes: interview.notes,
+      meetingLink: interview.meetingLink,
+      location: interview.location,
+      action: interview.status === 'cancelled' ? 'cancelled' : interview.status === 'rescheduled' ? 'rescheduled' : 'updated',
+    });
 
     const populated = await Interview.findById(interview._id)
       .populate('jobId', 'title company location')
@@ -287,4 +372,3 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-

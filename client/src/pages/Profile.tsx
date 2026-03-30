@@ -14,32 +14,39 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
+import { formatInr, formatInrRangeCompact, salaryExpectationPresets } from '@/lib/currency';
 import { getMissingProfileFields, isProfileComplete } from '@/lib/profileCompletion';
+import { downloadResumeFile } from '@/lib/resume';
 import { cn, resolveAssetUrl } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import {
+  Activity,
   Briefcase,
   Building2,
   Camera,
   CheckCircle2,
+  Crown,
   FileText,
   Globe,
+  Lock,
   Mail,
   MapPin,
   Plus,
+  ShieldCheck,
   Save,
   Shield,
   Sparkles,
   Upload,
   User,
+  Users,
   X,
 } from 'lucide-react';
 
 type ProfilePreferences = {
+  preferredRoles: string[];
   jobTypes: string[];
   salaryRange: number[];
   locations: string[];
@@ -73,8 +80,9 @@ type ProfileFormValues = {
 };
 
 const emptyPreferences: ProfilePreferences = {
+  preferredRoles: [],
   jobTypes: [],
-  salaryRange: [30000, 150000],
+  salaryRange: [300000, 1500000],
   locations: [],
   industries: [],
   notifications: {
@@ -173,6 +181,7 @@ const Profile: React.FC = () => {
   const [preferences, setPreferences] = useState<ProfilePreferences>(emptyPreferences);
 
   const isJobSeeker = user?.role === 'jobseeker';
+  const isAdmin = user?.role === 'admin';
   const schema = useMemo(() => buildSchema(Boolean(isJobSeeker)), [isJobSeeker]);
   const missingFields = user?.missingProfileFields?.length
     ? user.missingProfileFields
@@ -203,6 +212,9 @@ const Profile: React.FC = () => {
   );
   const sectionTitleClass = 'font-medium text-foreground';
   const avatarUrl = resolveAssetUrl(avatarPreview || user?.avatar);
+
+  const parsePreferenceList = (value: string) =>
+    Array.from(new Set(value.split(',').map((item) => item.trim()).filter(Boolean)));
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(schema),
@@ -245,15 +257,27 @@ const Profile: React.FC = () => {
     });
 
     setSkills(Array.isArray(user.skills) ? user.skills : []);
-    setPreferences((prev) => ({
-      ...prev,
+    setPreferences({
+      ...emptyPreferences,
       ...(user.preferences || {}),
-    }));
+      preferredRoles: Array.isArray(user.preferences?.preferredRoles) ? user.preferences.preferredRoles : [],
+      jobTypes: Array.isArray(user.preferences?.jobTypes) ? user.preferences.jobTypes : [],
+      salaryRange:
+        Array.isArray(user.preferences?.salaryRange) && user.preferences.salaryRange.length === 2
+          ? user.preferences.salaryRange.map((value) => (Number(value) > 250000 ? Number(value) : Number(value) * 10))
+          : emptyPreferences.salaryRange,
+      locations: Array.isArray(user.preferences?.locations) ? user.preferences.locations : [],
+      industries: Array.isArray(user.preferences?.industries) ? user.preferences.industries : [],
+      notifications: {
+        ...emptyPreferences.notifications,
+        ...(user.preferences?.notifications || {}),
+      },
+      privacy: {
+        ...emptyPreferences.privacy,
+        ...(user.preferences?.privacy || {}),
+      },
+    });
   }, [form, user]);
-
-  const resumeViewUrl =
-    user?.resumeUrl &&
-    resolveAssetUrl(user.resumeUrl);
 
   const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -292,7 +316,7 @@ const Profile: React.FC = () => {
     if (!resumeFile) {
       toast({
         title: 'Resume not selected',
-        description: 'Choose a PDF or Word file first.',
+        description: 'Choose a PDF file first.',
         variant: 'destructive',
       });
       return;
@@ -320,6 +344,19 @@ const Profile: React.FC = () => {
       });
     } finally {
       setResumeUploading(false);
+    }
+  };
+
+  const handleResumeDownload = async () => {
+    if (!user?._id) return;
+    try {
+      await downloadResumeFile(user._id, user.name);
+    } catch (error: any) {
+      toast({
+        title: 'Could not download resume',
+        description: error.response?.data?.message || error.message || 'Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -372,6 +409,138 @@ const Profile: React.FC = () => {
       setIsSaving(false);
     }
   };
+
+  if (isAdmin) {
+    return (
+      <div className="space-y-8" style={pageShellStyle}>
+        <AnimatedSection>
+          <div className={heroClass}>
+            <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-5">
+                <div className="relative">
+                  <Avatar className="h-24 w-24 border-4 border-primary/20 shadow-lg">
+                    <AvatarImage src={avatarUrl} />
+                    <AvatarFallback className={cn('text-2xl', darkTheme ? 'bg-primary/20 text-primary-foreground' : 'bg-primary/10 text-foreground')}>
+                      {user?.name?.[0] || 'A'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <label
+                    htmlFor="avatar-upload"
+                    className="absolute -bottom-1 -right-1 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:opacity-90"
+                  >
+                    {avatarUploading ? <LoadingSpinner size="sm" /> : <Camera className="h-4 w-4" />}
+                    <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                  </label>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Platform Administration</p>
+                    <h1 className="text-3xl font-semibold">Admin Profile</h1>
+                    <p className="mt-1 text-lg font-medium text-foreground">{user?.name || 'Vansh Tuteja'}</p>
+                    <p className="mt-1 text-muted-foreground">Full platform control, moderation access, and dashboard oversight.</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    <span className={pillClass}>
+                      <Mail className="h-4 w-4" />
+                      {user?.email}
+                    </span>
+                    <span className={cn('inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm', darkTheme ? 'bg-primary/18 text-primary-foreground' : 'bg-primary/10 text-primary')}>
+                      <Crown className="h-4 w-4" />
+                      Administrator
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className={cn('w-full max-w-sm space-y-3 rounded-2xl p-5 backdrop-blur', darkTheme ? 'bg-background/55' : 'bg-background/80')}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Access level</p>
+                    <p className="text-2xl font-semibold">Full</p>
+                  </div>
+                  <Badge className="bg-primary text-primary-foreground hover:bg-primary">Admin</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">Use the admin dashboard to monitor accounts, delete job posts, and review platform activity.</p>
+                <p className="text-xs text-muted-foreground">Theme: <span className="font-medium text-foreground">{themePreview.label}</span></p>
+              </div>
+            </div>
+          </div>
+        </AnimatedSection>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          {[
+            { title: 'User Management', desc: 'View user profiles, remove accounts, and monitor recent logins.', icon: Users },
+            { title: 'Job Governance', desc: 'Delete inappropriate job posts and watch platform job activity.', icon: Briefcase },
+            { title: 'System Oversight', desc: 'Track applications, interviews, and overall marketplace health.', icon: Activity },
+          ].map((item) => (
+            <AnimatedSection key={item.title}>
+              <Card className={mainCardClass}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <item.icon className="h-5 w-5 text-primary" />
+                    {item.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{item.desc}</p>
+                </CardContent>
+              </Card>
+            </AnimatedSection>
+          ))}
+        </div>
+
+        <AnimatedSection delay={0.08}>
+          <Card className={mainCardClass}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                Admin Identity
+              </CardTitle>
+              <CardDescription>Administrative account details and environment-controlled access.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-5 md:grid-cols-2">
+              <div className={cn('md:col-span-2 rounded-3xl border p-5', darkTheme ? 'border-primary/15 bg-background/50' : 'border-border bg-background/80')}>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <Avatar className="h-20 w-20 border-4 border-primary/15 shadow-lg">
+                    <AvatarImage src={avatarUrl} />
+                    <AvatarFallback className={cn('text-xl', darkTheme ? 'bg-primary/20 text-primary-foreground' : 'bg-primary/10 text-foreground')}>
+                      {user?.name?.[0] || 'A'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Signed In As</p>
+                    <p className="text-2xl font-semibold text-foreground">{user?.name || 'Platform Admin'}</p>
+                    <p className="text-sm text-muted-foreground">{user?.email}</p>
+                    <div className="pt-1">
+                      <Badge className="bg-primary text-primary-foreground hover:bg-primary">Administrator Access</Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className={softPanelClass}>
+                <p className={sectionTitleClass}>Admin email</p>
+                <p>{user?.email}</p>
+              </div>
+              <div className={softPanelClass}>
+                <p className={sectionTitleClass}>Role</p>
+                <p>{user?.role}</p>
+              </div>
+              <div className={softPanelClass}>
+                <p className={sectionTitleClass}>Security</p>
+                <p className="flex items-center gap-2"><Lock className="h-4 w-4" />Credentials are controlled from server env settings.</p>
+              </div>
+              <div className={softPanelClass}>
+                <p className={sectionTitleClass}>Last login</p>
+                <p>{user?.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Not available'}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </AnimatedSection>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8" style={pageShellStyle}>
@@ -508,8 +677,22 @@ const Profile: React.FC = () => {
                   <>
                     <Input
                       type="file"
-                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      onChange={(event) => setResumeFile(event.target.files?.[0] || null)}
+                      accept=".pdf,application/pdf"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] || null;
+                        const isPdf = Boolean(file && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')));
+                        if (file && !isPdf) {
+                          toast({
+                            title: 'Invalid resume format',
+                            description: 'Please upload your resume in PDF format only.',
+                            variant: 'destructive',
+                          });
+                          event.target.value = '';
+                          setResumeFile(null);
+                          return;
+                        }
+                        setResumeFile(file);
+                      }}
                     />
                     <Button
                       type="button"
@@ -529,15 +712,12 @@ const Profile: React.FC = () => {
                         </>
                       )}
                     </Button>
-                    {resumeViewUrl ? (
-                      <a
-                        href={resumeViewUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex text-sm font-medium text-primary underline"
-                      >
-                        View current resume
-                      </a>
+                    {user?.resumeUrl ? (
+                      <div className="flex flex-wrap gap-3">
+                        <Button type="button" variant="outline" onClick={() => void handleResumeDownload()}>
+                          Download current resume (PDF)
+                        </Button>
+                      </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">No resume uploaded yet.</p>
                     )}
@@ -770,15 +950,48 @@ const Profile: React.FC = () => {
               </CardContent>
             </Card>
 
-            {/* <Card className={mainCardClass}>
+            <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="h-5 w-5" />
-                  Preferences and privacy
+                  Preference matching
                 </CardTitle>
-                <CardDescription>Fine-tune visibility and platform behavior.</CardDescription>
+                <CardDescription>Set the job preferences we should use for recommendations and alerts.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="preferredRoles">Preferred roles</Label>
+                    <Input
+                      id="preferredRoles"
+                      value={preferences.preferredRoles.join(', ')}
+                      onChange={(event) =>
+                        setPreferences((prev) => ({
+                          ...prev,
+                          preferredRoles: parsePreferenceList(event.target.value),
+                        }))
+                      }
+                      placeholder="Frontend Developer, React Developer"
+                    />
+                    <p className="text-xs text-muted-foreground">Use commas to add one or more target roles.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="preferredLocations">Preferred locations</Label>
+                    <Input
+                      id="preferredLocations"
+                      value={preferences.locations.join(', ')}
+                      onChange={(event) =>
+                        setPreferences((prev) => ({
+                          ...prev,
+                          locations: parsePreferenceList(event.target.value),
+                        }))
+                      }
+                      placeholder="Bangalore, Remote, Pune"
+                    />
+                    <p className="text-xs text-muted-foreground">Jobs above 80% match will drive recommendations and alerts.</p>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <Label>Preferred job types</Label>
                   <div className="flex flex-wrap gap-2">
@@ -806,82 +1019,81 @@ const Profile: React.FC = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <Label>
-                    Salary range: ${preferences.salaryRange[0].toLocaleString()} - ${preferences.salaryRange[1].toLocaleString()}
-                  </Label>
+                  <div className="flex flex-col gap-2">
+                    <Label>Expected salary range</Label>
+                    <div className={cn('rounded-2xl border p-4', darkTheme ? 'border-border/70 bg-background/45' : 'border-border bg-background/70')}>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-lg font-semibold">{formatInrRangeCompact(preferences.salaryRange)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatInr(preferences.salaryRange[0])} to {formatInr(preferences.salaryRange[1])} per year
+                          </p>
+                        </div>
+                        <Badge variant="outline">India market format</Badge>
+                      </div>
+                    </div>
+                  </div>
                   <Slider
                     value={preferences.salaryRange}
                     onValueChange={(value: number[]) => setPreferences((prev) => ({ ...prev, salaryRange: value }))}
-                    min={30000}
-                    max={300000}
-                    step={5000}
+                    min={200000}
+                    max={5000000}
+                    step={100000}
                   />
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>2 LPA</span>
+                    <span>50 LPA</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {salaryExpectationPresets.map((preset) => {
+                      const active =
+                        preferences.salaryRange[0] === preset.range[0] &&
+                        preferences.salaryRange[1] === preset.range[1];
+
+                      return (
+                        <Badge
+                          key={preset.label}
+                          variant={active ? 'default' : 'outline'}
+                          className="cursor-pointer px-3 py-1"
+                          onClick={() =>
+                            setPreferences((prev) => ({
+                              ...prev,
+                              salaryRange: preset.range,
+                            }))
+                          }
+                        >
+                          {preset.label}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use a realistic annual salary expectation like major job portals in India, with quick LPA presets for faster matching.
+                  </p>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="flex items-center justify-between rounded-2xl border p-4">
-                    <div>
-                      <p className="font-medium">Profile visibility</p>
-                      <p className="text-sm text-muted-foreground">Allow others to discover your profile.</p>
-                    </div>
-                    <Switch
-                      checked={preferences.privacy.profileVisible}
-                      onCheckedChange={(checked: boolean) =>
-                        setPreferences((prev) => ({
-                          ...prev,
-                          privacy: { ...prev.privacy, profileVisible: checked },
-                        }))
-                      }
-                    />
+                <div className={cn('rounded-2xl border border-dashed p-4', darkTheme ? 'border-border/70 bg-background/35' : 'border-border bg-background/70')}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className={sectionTitleClass}>Matching skills</p>
+                    <Badge variant="secondary">{skills.length}</Badge>
                   </div>
-                  <div className="flex items-center justify-between rounded-2xl border p-4">
-                    <div>
-                      <p className="font-medium">Show contact details</p>
-                      <p className="text-sm text-muted-foreground">Let recruiters reach out directly.</p>
+                  {skills.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Add skills above so recommendations can match your profile to new jobs.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {skills.map((skill) => (
+                        <Badge key={`matching-skill-${skill}`} variant="secondary" className="px-3 py-1">
+                          {skill}
+                        </Badge>
+                      ))}
                     </div>
-                    <Switch
-                      checked={preferences.privacy.showContact}
-                      onCheckedChange={(checked: boolean) =>
-                        setPreferences((prev) => ({
-                          ...prev,
-                          privacy: { ...prev.privacy, showContact: checked },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between rounded-2xl border p-4">
-                    <div>
-                      <p className="font-medium">Email notifications</p>
-                      <p className="text-sm text-muted-foreground">Receive application and job updates.</p>
-                    </div>
-                    <Switch
-                      checked={preferences.notifications.email}
-                      onCheckedChange={(checked: boolean) =>
-                        setPreferences((prev) => ({
-                          ...prev,
-                          notifications: { ...prev.notifications, email: checked },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between rounded-2xl border p-4">
-                    <div>
-                      <p className="font-medium">Job alerts</p>
-                      <p className="text-sm text-muted-foreground">Get notified about matching roles.</p>
-                    </div>
-                    <Switch
-                      checked={preferences.notifications.jobAlerts}
-                      onCheckedChange={(checked: boolean) =>
-                        setPreferences((prev) => ({
-                          ...prev,
-                          notifications: { ...prev.notifications, jobAlerts: checked },
-                        }))
-                      }
-                    />
-                  </div>
+                  )}
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Matching uses preferred role, preferred location, job type, salary range, and your selected skills.
+                  </p>
                 </div>
               </CardContent>
-            </Card> */}
+            </Card>
 
             <div className="sticky bottom-4 z-10">
               <div className={cn('rounded-2xl border p-4 shadow-lg backdrop-blur', darkTheme ? 'border-primary/15 bg-card/88' : 'border-border/80 bg-background/95')}>

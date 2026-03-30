@@ -29,6 +29,7 @@ interface Job {
   isExternal?: boolean;
   source?: string;
   applyUrl?: string;
+  matchScore?: number;
 }
 
 interface JobFilters {

@@ -14,13 +14,12 @@ import {
   MessageSquare,
   Calendar,
   BarChart3,
-  Mail,
-  Settings,
-  HelpCircle,
   ChevronLeft,
   ChevronRight,
   Briefcase,
-  FileText
+  FileText,
+  HelpCircle,
+  Settings
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -42,10 +41,18 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
   const { user } = useAuthStore();
 
   const isEmployer = user?.role === 'employer';
+  const isAdmin = user?.role === 'admin';
 
-  const mainNavItems: NavItem[] = isEmployer
+  const mainNavItems: NavItem[] = isAdmin
+    ? [
+        { path: '/admin', label: 'Admin Dashboard', icon: Home },
+        { path: '/admin/insights', label: 'Site Insights', icon: BarChart3 },
+        { path: '/profile', label: 'Admin Profile', icon: User },
+      ]
+    : isEmployer
     ? [
         { path: '/employer', label: 'Dashboard', icon: Home },
+        { path: '/employer/interviews', label: 'Interview Tracker', icon: Calendar },
         { path: '/profile', label: 'Profile', icon: User },
         { path: '/insights', label: 'Career Insights', icon: BarChart3 },
       ]
@@ -61,11 +68,13 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
         { path: '/insights', label: 'Career Insights', icon: BarChart3 },
       ];
 
-  const secondaryNavItems: NavItem[] = [
-    // { path: '/messaging', label: 'Messages', icon: Mail, badge: 3 },
-    { path: '/settings', label: 'Settings', icon: Settings },
-    { path: '/help', label: 'Help & Support', icon: HelpCircle },
-  ];
+  const secondaryNavItems: NavItem[] = [];
+  const utilityNavItems: NavItem[] = !isAdmin
+    ? [
+        { path: '/settings', label: 'Settings', icon: Settings },
+        { path: '/help', label: 'Help & Support', icon: HelpCircle },
+      ]
+    : [];
 
   return (
     <div className={cn(
@@ -185,82 +194,64 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
             </div>
           </div>
 
-          <Separator />
+          {secondaryNavItems.length > 0 ? <Separator /> : null}
 
-          {/* Secondary Navigation */}
-          <div className="space-y-2">
-            <AnimatePresence>
-              {!isCollapsed && (
-                <motion.h2
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider"
-                >
-                  Tools & More
-                </motion.h2>
-              )}
-            </AnimatePresence>
-            
-            <div className="space-y-1">
-              {secondaryNavItems.map(({ path, label, icon: Icon, badge }) => (
-                <Link key={path} to={path}>
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <Button
-                      variant={location.pathname === path ? "secondary" : "ghost"}
-                      className={cn(
-                        "w-full justify-start relative group",
-                        isCollapsed ? "px-2" : "px-3",
-                        location.pathname === path && "bg-primary/10 text-primary border-r-2 border-primary"
-                      )}
+          {utilityNavItems.length > 0 ? (
+            <>
+              <Separator />
+              <div className="space-y-2">
+                <AnimatePresence>
+                  {!isCollapsed && (
+                    <motion.h2
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider"
                     >
-                      <Icon className={cn("h-4 w-4 shrink-0", isCollapsed ? "mx-auto" : "mr-3")} />
-                      <AnimatePresence>
-                        {!isCollapsed && (
-                          <motion.span
-                            initial={{ opacity: 0, width: 0 }}
-                            animate={{ opacity: 1, width: 'auto' }}
-                            exit={{ opacity: 0, width: 0 }}
-                            className="truncate"
-                          >
-                            {label}
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
-                      
-                      {/* Badge */}
-                      {badge && (
-                        <>
-                          {!isCollapsed ? (
-                            <Badge variant="destructive" className="ml-auto h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
-                              {badge}
-                            </Badge>
-                          ) : (
-                            <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full" />
+                      Support
+                    </motion.h2>
+                  )}
+                </AnimatePresence>
+
+                <div className="space-y-1">
+                  {utilityNavItems.map(({ path, label, icon: Icon }) => (
+                    <Link key={path} to={path}>
+                      <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                        <Button
+                          variant={location.pathname === path ? "secondary" : "ghost"}
+                          className={cn(
+                            "w-full justify-start relative group",
+                            isCollapsed ? "px-2" : "px-3",
+                            location.pathname === path && "bg-primary/10 text-primary border-r-2 border-primary"
                           )}
-                        </>
-                      )}
-                      
-                      {/* Tooltip for collapsed state */}
-                      {isCollapsed && (
-                        <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                          {label}
-                          {badge && (
-                            <Badge variant="destructive" className="ml-2 h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs">
-                              {badge}
-                            </Badge>
+                        >
+                          <Icon className={cn("h-4 w-4 shrink-0", isCollapsed ? "mx-auto" : "mr-3")} />
+                          <AnimatePresence>
+                            {!isCollapsed && (
+                              <motion.span
+                                initial={{ opacity: 0, width: 0 }}
+                                animate={{ opacity: 1, width: 'auto' }}
+                                exit={{ opacity: 0, width: 0 }}
+                                className="truncate"
+                              >
+                                {label}
+                              </motion.span>
+                            )}
+                          </AnimatePresence>
+
+                          {isCollapsed && (
+                            <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                              {label}
+                            </div>
                           )}
-                        </div>
-                      )}
-                    </Button>
-                  </motion.div>
-                </Link>
-              ))}
-            </div>
-          </div>
+                        </Button>
+                      </motion.div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       </ScrollArea>
     </div>

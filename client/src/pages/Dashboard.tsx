@@ -16,6 +16,7 @@ import { useJobStore } from '@/stores/jobStore';
 import { useNotificationStore } from '@/stores/notificationStore';
 import { toast } from '@/hooks/use-toast';
 import { getMissingProfileFields } from '@/lib/profileCompletion';
+import { formatSalaryDisplay } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import {
@@ -61,6 +62,8 @@ const Dashboard: React.FC = () => {
   const [interviews, setInterviews] = useState<any[]>([]);
   const [selectedJob, setSelectedJob] = useState<RecommendedJob | null>(null);
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const [showAllInterviews, setShowAllInterviews] = useState(false);
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const { jobs, savedJobs, pagination, fetchJobs, fetchSavedJobs, saveJob } = useJobStore();
@@ -91,7 +94,7 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       try {
         await Promise.all([
-          fetchJobs({ limit: 12 }),
+          fetchJobs({ limit: 24 }),
           fetchSavedJobs(),
           axios.get('/applications/candidate').then((res) => setApplications(res.data?.data || [])),
           axios.get('/interviews/candidate').then((res) => setInterviews(res.data?.data || [])),
@@ -119,13 +122,19 @@ const Dashboard: React.FC = () => {
     const runFetch = async () => {
       setNotificationLoading(true);
       try {
-        await fetchNotifications(5, 1);
+        await fetchNotifications(showAllNotifications ? 10 : 3, 1);
       } finally {
         setNotificationLoading(false);
       }
     };
 
     void runFetch();
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void runFetch();
+      }
+    }, 15000);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -136,9 +145,10 @@ const Dashboard: React.FC = () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [user?.role, fetchNotifications]);
+  }, [user?.role, fetchNotifications, showAllNotifications]);
 
   const profileMissingFields = useMemo(() => getMissingProfileFields(user), [user]);
   const profileCompletion = useMemo(() => {
@@ -172,21 +182,32 @@ const Dashboard: React.FC = () => {
 
   const recommendedJobs: RecommendedJob[] = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return jobs
+    const filteredJobs = jobs
       .filter((job) => job.isActive)
       .filter((job) => {
         if (!query) return true;
         return [job.title, job.company, job.location, ...(job.tags || [])]
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(query));
-      })
-      .slice(0, 4)
-      .map((job) => ({
+      });
+
+    const strongMatches = filteredJobs
+      .filter((job) => (job.matchScore ?? 0) >= 80)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 6);
+
+    const fallbackJobs = [...filteredJobs]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 18)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 6);
+
+    return (strongMatches.length > 0 ? strongMatches : fallbackJobs).map((job) => ({
         id: job._id,
         title: job.title,
         company: job.company || job.employerId?.company || 'Company',
         location: job.location || 'Location not specified',
-        salary: job.salary || 'Salary not specified',
+        salary: formatSalaryDisplay(job.salary),
         type: job.type,
         tags: job.tags || [],
         description: job.description,
@@ -199,7 +220,14 @@ const Dashboard: React.FC = () => {
   }, [jobs, searchQuery]);
 
   const savedJobIds = useMemo(() => savedJobs.map((job) => job._id), [savedJobs]);
-  const latestNotifications = useMemo(() => notifications.slice(0, 5), [notifications]);
+  const visibleNotifications = useMemo(
+    () => (showAllNotifications ? notifications : notifications.slice(0, 3)),
+    [notifications, showAllNotifications],
+  );
+  const visibleInterviews = useMemo(
+    () => (showAllInterviews ? upcomingInterviews : upcomingInterviews.slice(0, 2)),
+    [showAllInterviews, upcomingInterviews],
+  );
 
   const stats = [
     {
@@ -401,6 +429,11 @@ const Dashboard: React.FC = () => {
                   <Link to="/jobs">View All</Link>
                 </Button>
               </div>
+              <p className="text-sm text-muted-foreground">
+                {jobs.some((job) => (job.matchScore ?? 0) >= 80)
+                  ? 'Newest top 6 jobs with at least an 80% match against your profile and preference settings.'
+                  : 'No 80%+ matches yet, so we are showing newly posted jobs for you.'}
+              </p>
 
               {recommendedJobs.length > 0 ? (
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -425,7 +458,7 @@ const Dashboard: React.FC = () => {
                 <Card className={mainCardClass}>
                   <CardContent className="py-12 text-center">
                     <Briefcase className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
-                    <p className="font-medium">No matching jobs right now</p>
+                    <p className="font-medium">No jobs available right now</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Try a broader search or explore all openings on the Jobs page.
                     </p>
@@ -496,7 +529,7 @@ const Dashboard: React.FC = () => {
                     </Badge>
                   )}
                 </CardTitle>
-                {latestNotifications.length > 0 && (
+                {notifications.length > 0 && (
                   <div className="flex justify-end">
                     <Button
                       type="button"
@@ -530,8 +563,8 @@ const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-center py-8">
                     <LoadingSpinner size="sm" />
                   </div>
-                ) : latestNotifications.length > 0 ? (
-                  latestNotifications.map((notification, index) => {
+                ) : visibleNotifications.length > 0 ? (
+                  visibleNotifications.map((notification, index) => {
                     const typeConfig = {
                       'job-match': {
                         icon: Briefcase,
@@ -646,11 +679,22 @@ const Dashboard: React.FC = () => {
                     </p>
                   </div>
                 )}
-                {latestNotifications.length > 0 && (
-                  <p className="pt-1 text-right text-[11px] text-muted-foreground">
-                    Showing the latest {latestNotifications.length} notifications
-                  </p>
-                )}
+                {notifications.length > 3 ? (
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-[11px] text-muted-foreground">
+                      Showing {visibleNotifications.length} of {notifications.length} notifications
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setShowAllNotifications((current) => !current)}
+                    >
+                      {showAllNotifications ? 'Show less' : 'More'}
+                    </Button>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </AnimatedSection>
@@ -664,8 +708,8 @@ const Dashboard: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {upcomingInterviews.length > 0 ? (
-                  upcomingInterviews.slice(0, 3).map((interview, index) => (
+                {visibleInterviews.length > 0 ? (
+                  visibleInterviews.map((interview, index) => (
                     <motion.div
                       key={interview._id || index}
                       initial={{ opacity: 0, x: 20 }}
@@ -710,6 +754,19 @@ const Dashboard: React.FC = () => {
                     </p>
                   </div>
                 )}
+                {upcomingInterviews.length > 2 ? (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setShowAllInterviews((current) => !current)}
+                    >
+                      {showAllInterviews ? 'Show less' : 'More'}
+                    </Button>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </AnimatedSection>

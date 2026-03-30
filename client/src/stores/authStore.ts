@@ -26,6 +26,7 @@ interface User {
   education?: string;
   skills: string[];
   preferences: {
+    preferredRoles: string[];
     jobTypes: string[];
     salaryRange: number[];
     locations: string[];
@@ -49,6 +50,7 @@ interface User {
     status: 'pending' | 'reviewed' | 'interviewed' | 'hired' | 'rejected';
   }>;
   isVerified: boolean;
+  lastLoginAt?: string;
   profileCompleted?: boolean;
   missingProfileFields?: string[];
   createdAt: string;
@@ -97,8 +99,10 @@ export const useAuthStore = create<AuthState>()(
           const errorMessage = error.response?.data?.message || 'Login failed';
           set({ error: errorMessage, isLoading: false });
           const code = error.response?.data?.data?.code;
+          const status = error.response?.status;
           const err: any = new Error(errorMessage);
           if (code) err.code = code;
+          if (status) err.status = status;
           throw err;
         }
       },
@@ -111,7 +115,12 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           const errorMessage = error.response?.data?.message || 'Signup failed';
           set({ error: errorMessage, isLoading: false });
-          throw new Error(errorMessage);
+          const err: any = new Error(errorMessage);
+          const code = error.response?.data?.data?.code;
+          const status = error.response?.status;
+          if (code) err.code = code;
+          if (status) err.status = status;
+          throw err;
         }
       },
 
@@ -126,7 +135,9 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           const errorMessage = error.response?.data?.message || 'OTP verification failed';
           set({ error: errorMessage, isLoading: false });
-          throw new Error(errorMessage);
+          const err: any = new Error(errorMessage);
+          err.status = error.response?.status;
+          throw err;
         }
       },
 
@@ -138,7 +149,10 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           const errorMessage = error.response?.data?.message || 'Failed to resend code';
           set({ error: errorMessage, isLoading: false });
-          throw new Error(errorMessage);
+          const err: any = new Error(errorMessage);
+          err.status = error.response?.status;
+          err.retryAfterSeconds = error.response?.data?.data?.retryAfterSeconds;
+          throw err;
         }
       },
 
@@ -150,7 +164,10 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           const errorMessage = error.response?.data?.message || 'Failed to send reset code';
           set({ error: errorMessage, isLoading: false });
-          throw new Error(errorMessage);
+          const err: any = new Error(errorMessage);
+          err.status = error.response?.status;
+          err.retryAfterSeconds = error.response?.data?.data?.retryAfterSeconds;
+          throw err;
         }
       },
 
@@ -162,7 +179,9 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           const errorMessage = error.response?.data?.message || 'Password reset failed';
           set({ error: errorMessage, isLoading: false });
-          throw new Error(errorMessage);
+          const err: any = new Error(errorMessage);
+          err.status = error.response?.status;
+          throw err;
         }
       },
 

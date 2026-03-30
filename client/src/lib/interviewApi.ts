@@ -59,6 +59,16 @@ export interface UploadResponseResult {
   sessionId: string;
   usedFallbackEvaluation?: boolean;
   transcriptDetected?: boolean;
+  transcriptSource?: 'uploaded-media' | 'provided-text' | 'none';
+}
+
+function fileNameFromBlob(blob: Blob) {
+  const type = blob.type.toLowerCase();
+  if (type.includes('mp4')) return 'recording.mp4';
+  if (type.includes('wav')) return 'recording.wav';
+  if (type.includes('ogg')) return 'recording.ogg';
+  if (type.includes('webm')) return 'recording.webm';
+  return 'recording.webm';
 }
 
 export interface SessionScores {
@@ -119,7 +129,7 @@ export const interviewApi = {
     confidenceMetrics?: ConfidenceMetrics
   ): Promise<UploadResponseResult> => {
     const form = new FormData();
-    form.append('audio', audioBlob, 'recording.webm');
+    form.append('audio', audioBlob, fileNameFromBlob(audioBlob));
     form.append('sessionId', sessionId);
     form.append('questionIndex', String(questionIndex));
     if (confidenceMetrics) form.append('confidenceMetrics', JSON.stringify(confidenceMetrics));

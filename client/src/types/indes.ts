@@ -19,6 +19,7 @@ export interface User {
 }
 
 export interface UserPreferences {
+  preferredRoles: string[];
   jobTypes: string[];
   salaryRange: number[];
   locations: string[];

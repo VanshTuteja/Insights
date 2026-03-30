@@ -7,6 +7,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   PolarAngleAxis,
@@ -15,6 +17,8 @@ import {
   Radar,
   RadarChart,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
@@ -26,6 +30,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { createPremiumChartPalette } from '@/lib/chartTheme';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
@@ -204,11 +209,12 @@ const Insights = () => {
 
   const roleInsight = INDIA_ROLE_INSIGHTS[selectedRole];
   const regionInsight = REGION_CONFIG[selectedRegion];
-  const chartPrimary = themePreview.primary;
-  const chartSecondary = darkTheme ? '#38bdf8' : '#0ea5e9';
-  const chartSuccess = darkTheme ? '#34d399' : '#16a34a';
-  const chartWarning = '#f59e0b';
-  const chartDanger = '#f97316';
+  const chartPalette = createPremiumChartPalette(themePreview.primary, themePreview.secondary, darkTheme);
+  const chartPrimary = chartPalette.primary;
+  const chartSecondary = chartPalette.secondary;
+  const chartSuccess = chartPalette.success;
+  const chartWarning = chartPalette.warning;
+  const chartDanger = chartPalette.danger;
   const salaryBand = roleInsight.salary[selectedExperience];
   const salaryRange: [number, number] = [round1(salaryBand.current[0] * regionInsight.salaryMultiplier), round1(salaryBand.current[1] * regionInsight.salaryMultiplier)];
   const futureSalaryRange: [number, number] = [round1(salaryBand.future[0] * regionInsight.salaryMultiplier), round1(salaryBand.future[1] * regionInsight.salaryMultiplier)];
@@ -225,10 +231,22 @@ const Insights = () => {
     applicants: Math.round(item.applicants * competitionFactor * regionInsight.competitionMultiplier),
     openings: Math.round(item.openings * regionInsight.openingsMultiplier),
   }));
-  const locationPalette = [chartPrimary, chartSuccess, chartSecondary, chartWarning, '#ef4444', '#8b5cf6'];
+  const locationPalette = [chartPrimary, chartSuccess, chartSecondary, chartWarning, chartDanger, chartPalette.neutral];
   const locationData = roleInsight.locations[selectedRegion].map((item, index) => ({ ...item, color: locationPalette[index % locationPalette.length] }));
   const jobDemand = roleInsight.demand.map((item) => ({ ...item, openings: Math.round(item.openings * regionInsight.openingsMultiplier) }));
   const difficultyScore = clamp(roleInsight.entryDifficulty[selectedExperience] + (selectedRegion === 'remote-friendly' ? 4 : selectedRegion === 'metros' ? 2 : 0));
+  const marketPulseData = growthTrends.map((item, index) => ({
+    year: item.year,
+    openings: item.openings,
+    salary: round1(avg(salaryRange) + index * 0.8),
+    remoteShare: clamp(roleInsight.remoteShare + regionInsight.remoteAdjustment + index),
+  }));
+  const readinessTrendData = roleInsight.skills.slice(0, 5).map((item, index) => ({
+    skill: item.skill,
+    market: item.required,
+    current: clamp(item.coverage[selectedExperience] + (selectedRegion === 'remote-friendly' ? 2 : 0)),
+    opportunity: clamp(item.required - item.coverage[selectedExperience] + 20 + index * 2),
+  }));
   const headlineStats = [
     { title: 'India hiring growth', value: roleInsight.growthRate, description: `${roleInsight.label} openings are still expanding across India.`, icon: TrendingUp },
     { title: 'Salary range', value: formatRange(salaryRange), description: `${selectedExperience} market estimate in ${regionInsight.label.toLowerCase()}.`, icon: DollarSign },
@@ -365,6 +383,116 @@ const Insights = () => {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </AnimatedSection>
+
+        <AnimatedSection delay={0.1}>
+          <Card className={mainCardClass}>
+            <CardHeader>
+              <CardTitle>Market pulse dashboard</CardTitle>
+              <CardDescription>A more visual snapshot of demand, salary direction, and flexible work for your current filters.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={marketPulseData}>
+                      <defs>
+                        <linearGradient id="pulseOpenings" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={chartPrimary} stopOpacity={0.82} />
+                          <stop offset="100%" stopColor={chartPrimary} stopOpacity={0.08} />
+                        </linearGradient>
+                        <linearGradient id="pulseRemote" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={chartSecondary} stopOpacity={0.72} />
+                          <stop offset="100%" stopColor={chartSecondary} stopOpacity={0.08} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="year" stroke="hsl(var(--muted-foreground))" />
+                      <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" />
+                      <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" />
+                      <Tooltip {...tooltipStyle} />
+                      <Area yAxisId="left" type="monotone" dataKey="openings" stroke={chartPrimary} fill="url(#pulseOpenings)" strokeWidth={2.5} name="Openings" />
+                      <Area yAxisId="right" type="monotone" dataKey="remoteShare" stroke={chartSecondary} fill="url(#pulseRemote)" strokeWidth={2.5} name="Remote share" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid gap-4">
+                  <div className={metricCardClass}>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Projected openings</p>
+                    <p className="mt-2 text-2xl font-semibold">{growthTrends[growthTrends.length - 1]?.openings?.toLocaleString('en-IN')}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Demand outlook for your current region selection.</p>
+                  </div>
+                  <div className={metricCardClass}>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Remote flexibility</p>
+                    <p className="mt-2 text-2xl font-semibold">{clamp(roleInsight.remoteShare + regionInsight.remoteAdjustment)}%</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Estimated share of remote or hybrid roles.</p>
+                  </div>
+                  <div className={metricCardClass}>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Salary midpoint</p>
+                    <p className="mt-2 text-2xl font-semibold">{formatLpa(avg(salaryRange))}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Current average for {selectedExperience} talent.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="salary" name="Salary midpoint" unit=" LPA" stroke="hsl(var(--muted-foreground))" />
+                    <YAxis dataKey="openings" name="Openings" stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip {...tooltipStyle} formatter={(value: number, name) => [name === 'salary' ? formatLpa(value) : value.toLocaleString('en-IN'), name]} />
+                    <Scatter data={marketPulseData} fill={chartWarning} name="Market pulse" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </AnimatedSection>
+
+        <AnimatedSection delay={0.11}>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <Card className={mainCardClass}>
+              <CardHeader>
+                <CardTitle>Readiness vs market expectation</CardTitle>
+                <CardDescription>Theme-aware comparison of skill readiness, demand, and upside for the selected role.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={readinessTrendData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="skill" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <Tooltip {...tooltipStyle} />
+                      <Line type="monotone" dataKey="market" name="Market expectation" stroke={chartWarning} strokeWidth={2.5} dot={{ r: 4, fill: chartWarning }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="current" name="Current readiness" stroke={chartPrimary} strokeWidth={3} dot={{ r: 4, fill: chartPrimary }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="opportunity" name="Upside potential" stroke={chartSuccess} strokeWidth={2.5} dot={{ r: 4, fill: chartSuccess }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className={mainCardClass}>
+              <CardHeader>
+                <CardTitle className="text-base">Professional readout</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div className={infoPanelClass}>
+                  <p className="font-semibold text-foreground">Best next move</p>
+                  <p className="mt-1">Focus on the largest gap between current readiness and market expectation to get the fastest visible resume improvement.</p>
+                </div>
+                <div className={infoPanelClass}>
+                  <p className="font-semibold text-foreground">Market signal</p>
+                  <p className="mt-1">Hover over the chart to compare exactly where your current experience band is strongest and where hiring pressure is highest.</p>
+                </div>
+                <div className={infoPanelClass}>
+                  <p className="font-semibold text-foreground">Theme-aware data view</p>
+                  <p className="mt-1">Chart colors, tooltips, and grid contrast now follow the active theme so data remains readable in every theme preset.</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </AnimatedSection>
 

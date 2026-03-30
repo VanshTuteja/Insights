@@ -97,7 +97,7 @@ export const getCandidateApplications = async (req: AuthRequest, res: Response) 
     const interviews = await Interview.find({
       candidateId,
       jobId: { $in: jobIds },
-      status: 'scheduled',
+      status: { $in: ['scheduled', 'rescheduled'] },
     })
       .select('jobId scheduledAt meetingLink type notes')
       .lean();

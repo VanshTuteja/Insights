@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,8 +16,6 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Building2,
-  User
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuthStore } from '@/stores/authStore';
@@ -47,31 +44,52 @@ const Interviews: React.FC = () => {
 
           return {
             id: iv._id,
-            company: job?.company,
-            position: job?.title,
+            company: job?.company || 'Company',
+            position: job?.title || 'Interview',
             interviewer: interviewer?.name || 'Interviewer',
             interviewerRole: interviewer?.jobTitle || '',
             date: scheduled.toISOString(),
             time: scheduled.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             duration: `${durationMinutes} minutes`,
             type: typeLabel,
-            status: iv.status === 'scheduled' ? 'upcoming' : iv.status,
-            location: iv.meetingLink || job?.location || '',
+            status: ['scheduled', 'rescheduled'].includes(iv.status) ? 'upcoming' : iv.status,
+            location: iv.location || iv.meetingLink || job?.location || '',
             notes: iv.notes,
             avatar: interviewer?.avatar,
             meetingLink: iv.meetingLink,
           };
         });
         setInterviews(mapped);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(error);
+      } catch (error: any) {
+        toast({
+          title: 'Failed to load interviews',
+          description: error.response?.data?.message || 'Please try again.',
+          variant: 'destructive',
+        });
       }
     };
 
     if (user) {
       void loadInterviews();
     }
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void loadInterviews();
+      }
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void loadInterviews();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [user]);
 
   const upcomingInterviews = interviews.filter(interview => interview.status === 'upcoming');
@@ -115,13 +133,6 @@ const Interviews: React.FC = () => {
       default:
         return <MessageCircle className="h-4 w-4" />;
     }
-  };
-
-  const handleReschedule = (interviewId: string) => {
-    toast({
-      title: 'Reschedule request sent',
-      description: 'The interviewer will be notified of your request.',
-    });
   };
 
   const handleCancel = async (interviewId: string) => {

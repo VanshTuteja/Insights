@@ -35,6 +35,33 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 };
 
+export const optionalAuthenticateToken = async (req: AuthRequest, _res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const tokenFromHeader = authHeader && authHeader.split(' ')[1];
+    const token = tokenFromHeader || req.cookies.token;
+
+    if (!token) {
+      return next();
+    }
+
+    const decoded = jwt.verify(token, config.jwt.secret) as { userId: string };
+    const user = await User.findById(decoded.userId).select('email role');
+
+    if (user) {
+      req.user = {
+        userId: user._id.toString(),
+        email: user.email,
+        role: user.role as 'jobseeker' | 'employer' | 'admin',
+      };
+    }
+  } catch (error) {
+    logger.warn('Optional authentication skipped', error);
+  }
+
+  return next();
+};
+
 /** Restrict access to specific roles. Use after authenticateToken. */
 export const requireRole = (...allowedRoles: Array<'jobseeker' | 'employer' | 'admin'>) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {

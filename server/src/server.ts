@@ -15,6 +15,9 @@ import applicationRoutes from './routes/application';
 import interviewsRoutes from './routes/interviews';
 import uploadRoutes from './routes/upload';
 import notificationRoutes from './routes/notification';
+import resumeRoutes from './routes/resume';
+import adminRoutes from './routes/admin';
+import { startInterviewReminderService } from './services/interviewReminderService';
 
 const app = express();
 
@@ -49,6 +52,8 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/interviews', interviewsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/resume', resumeRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
@@ -135,6 +140,7 @@ async function startServer() {
       logger.info(`CORS origin: ${config.cors.origin}`);
       logger.info(`MongoDB URI: ${config.mongodb.uri}`);
     });
+    startInterviewReminderService();
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

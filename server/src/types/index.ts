@@ -21,6 +21,7 @@ export interface IUser extends Document {
   education?: string;
   skills: string[];
   preferences: {
+    preferredRoles: string[];
     jobTypes: ('full-time' | 'part-time' | 'contract' | 'remote' | 'hybrid')[];
     salaryRange: number[];
     locations: string[];
@@ -38,6 +39,7 @@ export interface IUser extends Document {
     };
   };
   isVerified: boolean;
+  lastLoginAt?: Date;
 
   otpHash?: string;
   otpExpiry?: Date;
@@ -81,6 +83,7 @@ export interface IJob extends Document {
   }>;
   views: number;
   isActive: boolean;
+  matchScore?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -99,6 +102,8 @@ export interface IInterview extends Document {
   feedback?: string;
   location?: string;
   meetingLink?: string;
+  candidateReminderSent: boolean;
+  employerReminderSent: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

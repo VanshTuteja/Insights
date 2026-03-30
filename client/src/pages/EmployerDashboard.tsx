@@ -27,9 +27,13 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import axios from 'axios';
 import { useAuthStore } from '@/stores/authStore';
@@ -48,6 +52,7 @@ import {
   Clock,
   TrendingUp,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
 
 const EmployerDashboard: React.FC = () => {
@@ -68,17 +73,22 @@ const EmployerDashboard: React.FC = () => {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleCandidateId, setScheduleCandidateId] = useState<string | null>(null);
   const [scheduleJobId, setScheduleJobId] = useState<string | null>(null);
+  const [scheduleApplicationId, setScheduleApplicationId] = useState<string | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [scheduleType, setScheduleType] = useState<'video' | 'phone' | 'onsite'>('video');
   const [scheduleLink, setScheduleLink] = useState('');
   const [scheduleNotes, setScheduleNotes] = useState('');
+  const [scheduleDuration, setScheduleDuration] = useState('60');
+  const [scheduleLoading, setScheduleLoading] = useState(false);
   const [jobApplicantsOpen, setJobApplicantsOpen] = useState(false);
   const [jobApplicantsLoading, setJobApplicantsLoading] = useState(false);
   const [selectedApplicantsJob, setSelectedApplicantsJob] = useState<any>(null);
   const [jobApplicants, setJobApplicants] = useState<any[]>([]);
   const { user } = useAuthStore();
   const refreshPublicJobs = useJobStore((state) => state.fetchJobs);
+  const scheduleDateInputRef = React.useRef<HTMLInputElement | null>(null);
+  const scheduleTimeInputRef = React.useRef<HTMLInputElement | null>(null);
   const pageShellStyle = {
     backgroundImage: darkTheme
       ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.22), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.16), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.94) 100%)'
@@ -251,11 +261,16 @@ const EmployerDashboard: React.FC = () => {
     if (selectedJob) {
       try {
         await axios.delete(`/jobs/delete/${selectedJob.id || selectedJob._id}`);
-        setActiveJobs(activeJobs.filter(job => job.id !== selectedJob.id && job.id !== selectedJob._id));
+        if ((selectedApplicantsJob?.id || selectedApplicantsJob?._id) === (selectedJob.id || selectedJob._id)) {
+          setJobApplicantsOpen(false);
+          setSelectedApplicantsJob(null);
+          setJobApplicants([]);
+        }
         toast({
           title: 'Job deleted',
           description: 'The job posting has been removed.',
         });
+        await loadData();
         void refreshPublicJobs({ limit: 12 });
       } catch (error: any) {
         toast({
@@ -271,7 +286,9 @@ const EmployerDashboard: React.FC = () => {
 
   const handleViewCandidate = (candidate: any) => {
     setSelectedCandidate(candidate);
+    setScheduleCandidateId(candidate.candidateId || null);
     setScheduleJobId(candidate.jobId || null);
+    setScheduleApplicationId(candidate.applicationId || null);
     setCandidateDetailsOpen(true);
   };
 
@@ -332,54 +349,62 @@ const EmployerDashboard: React.FC = () => {
     setCandidateDetailsOpen(false);
   };
 
-  const handleOpenSchedule = (candidateId: string, jobId?: string) => {
-    setScheduleCandidateId(candidateId);
-    if (jobId) setScheduleJobId(jobId);
+  const handleOpenSchedule = (candidateId: string, jobId?: string, applicationId?: string) => {
+    setScheduleCandidateId(candidateId || selectedCandidate?.candidateId || null);
+    setScheduleJobId(jobId || selectedCandidate?.jobId || selectedApplicantsJob?.id || selectedApplicantsJob?._id || null);
+    setScheduleApplicationId(applicationId || selectedCandidate?.applicationId || null);
     setScheduleDate('');
     setScheduleTime('');
     setScheduleType('video');
     setScheduleLink('');
     setScheduleNotes('');
+    setScheduleDuration('60');
     setScheduleOpen(true);
   };
 
-	  const handleScheduleInterview = async () => {
-	    if (!scheduleCandidateId || !scheduleJobId || !scheduleDate || !scheduleTime) {
-	      toast({
-	        title: 'Missing details',
-	        description: 'Please choose a candidate, job, date, time, and interview type.',
-	        variant: 'destructive',
-	      });
-	      return;
-	    }
+  const handleScheduleInterview = async () => {
+    if ((!scheduleCandidateId && !scheduleApplicationId) || !scheduleJobId || !scheduleDate || !scheduleTime) {
+      toast({
+        title: 'Missing details',
+        description: 'Please choose an applicant, job, date, time, and interview type.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-	    if ((scheduleType === 'video' || scheduleType === 'phone') && !scheduleLink.trim()) {
-	      toast({
-	        title: 'Missing meeting details',
-	        description: scheduleType === 'video'
-	          ? 'Please add a meeting link for the video interview.'
-	          : 'Please add phone or meeting details for the phone interview.',
-	        variant: 'destructive',
-	      });
-	      return;
-	    }
+    if ((scheduleType === 'video' || scheduleType === 'phone') && !scheduleLink.trim()) {
+      toast({
+        title: 'Missing meeting details',
+        description: scheduleType === 'video'
+          ? 'Please add a meeting link for the video interview.'
+          : 'Please add phone or meeting details for the phone interview.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-	    try {
-	      await axios.post('/interviews/schedule', {
-	        jobId: scheduleJobId,
-	        candidateId: scheduleCandidateId,
+    try {
+      setScheduleLoading(true);
+      await axios.post('/interviews/schedule', {
+        jobId: scheduleJobId,
+        candidateId: scheduleCandidateId,
+        applicationId: scheduleApplicationId,
         date: scheduleDate,
         time: scheduleTime,
         type: scheduleType,
         meetingLink: scheduleLink,
         notes: scheduleNotes,
+        duration: Number(scheduleDuration) || 60,
       });
 
-	      toast({
-	        title: 'Interview scheduled',
-	        description: 'The candidate has been invited.',
-	      });
+      toast({
+        title: 'Interview scheduled',
+        description: 'The candidate has been invited.',
+      });
       await loadData();
+      if (selectedApplicantsJob) {
+        await handleViewApplicants(selectedApplicantsJob);
+      }
       setScheduleOpen(false);
       setCandidateDetailsOpen(false);
     } catch (error: any) {
@@ -388,6 +413,8 @@ const EmployerDashboard: React.FC = () => {
         description: error.response?.data?.message || 'Please try again.',
         variant: 'destructive',
       });
+    } finally {
+      setScheduleLoading(false);
     }
   };
 
@@ -407,6 +434,10 @@ const EmployerDashboard: React.FC = () => {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
+              <Button variant="outline" className={cn(darkTheme ? 'border-primary/20 bg-background/40' : 'border-border bg-background/80')} onClick={() => navigate('/employer/interviews')}>
+                <Calendar className="mr-2 h-4 w-4" />
+                Track Interviews
+              </Button>
               <Button variant="outline" className={cn(darkTheme ? 'border-primary/20 bg-background/40' : 'border-border bg-background/80')} onClick={() => navigate('/insights')}>
                 <ArrowRight className="mr-2 h-4 w-4" />
                 Open Career Insights
@@ -668,7 +699,7 @@ const EmployerDashboard: React.FC = () => {
                     <Button size="sm" variant="outline" onClick={() => handleViewCandidate(application)}>
                       View Details
                     </Button>
-                    <Button size="sm" onClick={() => handleOpenSchedule(application.candidateId, application.jobId)}>
+                    <Button size="sm" onClick={() => handleOpenSchedule(application.candidateId, application.jobId, application.applicationId || application.id)}>
                       Schedule Interview
                     </Button>
                   </div>
@@ -679,60 +710,124 @@ const EmployerDashboard: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Schedule Interview</AlertDialogTitle>
-            <AlertDialogDescription>
+      <Dialog open={scheduleOpen} onOpenChange={(open) => {
+        if (!scheduleLoading) {
+          setScheduleOpen(open);
+        }
+      }}>
+        <DialogContent className="max-w-xl" showCloseButton={!scheduleLoading}>
+          <DialogHeader>
+            <DialogTitle>Schedule Interview</DialogTitle>
+            <DialogDescription>
               Choose date, time and interview type for this candidate.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="flex space-x-2">
-              <input
-                type="date"
-                className="flex-1 border rounded px-2 py-1 text-sm bg-background"
-                value={scheduleDate}
-                onChange={(e) => setScheduleDate(e.target.value)}
-              />
-              <input
-                type="time"
-                className="flex-1 border rounded px-2 py-1 text-sm bg-background"
-                value={scheduleTime}
-                onChange={(e) => setScheduleTime(e.target.value)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="relative">
+                <Input
+                  ref={scheduleDateInputRef}
+                  type="date"
+                  value={scheduleDate}
+                  onChange={(e) => setScheduleDate(e.target.value)}
+                  disabled={scheduleLoading}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-3 flex items-center text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => {
+                    const input = scheduleDateInputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
+                    input?.showPicker?.();
+                    input?.focus();
+                  }}
+                  disabled={scheduleLoading}
+                  aria-label="Open calendar"
+                >
+                  <Calendar className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="relative">
+                <Input
+                  ref={scheduleTimeInputRef}
+                  type="time"
+                  value={scheduleTime}
+                  onChange={(e) => setScheduleTime(e.target.value)}
+                  disabled={scheduleLoading}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-3 flex items-center text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => {
+                    const input = scheduleTimeInputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
+                    input?.showPicker?.();
+                    input?.focus();
+                  }}
+                  disabled={scheduleLoading}
+                  aria-label="Open time picker"
+                >
+                  <Clock className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Select
+              value={scheduleType}
+              onValueChange={(value) => setScheduleType(value as 'video' | 'phone' | 'onsite')}
+              disabled={scheduleLoading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Interview type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="video">Video</SelectItem>
+                  <SelectItem value="phone">Phone</SelectItem>
+                  <SelectItem value="onsite">Onsite</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                type="number"
+                min="15"
+                max="480"
+                step="15"
+                value={scheduleDuration}
+                onChange={(e) => setScheduleDuration(e.target.value)}
+                disabled={scheduleLoading}
+                placeholder="Duration in minutes"
               />
             </div>
-            <select
-              className="w-full border rounded px-2 py-1 text-sm bg-background"
-              value={scheduleType}
-              onChange={(e) => setScheduleType(e.target.value as 'video' | 'phone' | 'onsite')}
-            >
-              <option value="video">Video</option>
-              <option value="phone">Phone</option>
-              <option value="onsite">Onsite</option>
-            </select>
-	            <input
-	              type="text"
-	              className="w-full border rounded px-2 py-1 text-sm bg-background"
-	              placeholder={scheduleType === 'onsite' ? 'Office address or meeting location' : scheduleType === 'phone' ? 'Phone number or call details' : 'Meeting link'}
-	              value={scheduleLink}
-	              onChange={(e) => setScheduleLink(e.target.value)}
-	            />
-            <textarea
-              className="w-full border rounded px-2 py-1 text-sm bg-background min-h-[60px]"
+            <Input
+              type="text"
+              placeholder={scheduleType === 'onsite' ? 'Office address or meeting location' : scheduleType === 'phone' ? 'Phone number or call details' : 'Meeting link'}
+              value={scheduleLink}
+              onChange={(e) => setScheduleLink(e.target.value)}
+              disabled={scheduleLoading}
+            />
+            <Textarea
               placeholder="Notes for the candidate (optional)"
               value={scheduleNotes}
               onChange={(e) => setScheduleNotes(e.target.value)}
+              disabled={scheduleLoading}
             />
           </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleScheduleInterview}>
-              Schedule
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleOpen(false)} disabled={scheduleLoading}>
+              Cancel
+            </Button>
+            <Button onClick={handleScheduleInterview} disabled={scheduleLoading}>
+              {scheduleLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Scheduling...
+                </>
+              ) : (
+                'Schedule'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

@@ -3,41 +3,14 @@ import mongoose from 'mongoose';
 import Job from '../models/Job';
 import User from '../models/Users';
 import Application from '../models/Application';
+import Interview from '../models/Interview';
+import Notification from '../models/Notification';
 import { createNotificationForUsers } from './notificationController';
 import { AuthRequest, ApiResponse } from '../types';
 import logger from '../utils/logger';
 import { fetchAdzunaJobs } from '../services/adzunaService';
-
-function normalizeText(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function parseSalaryUpperBound(value: string): number | null {
-  const normalized = value.toLowerCase().replace(/,/g, '');
-  const matches = normalized.match(/\d+(?:\.\d+)?\s*[kmb]?/g);
-  if (!matches || matches.length === 0) return null;
-
-  const parsed = matches
-    .map((part) => {
-      const trimmed = part.trim();
-      const suffix = trimmed.slice(-1);
-      const numeric = Number(trimmed.replace(/[kmb]$/i, ''));
-      if (Number.isNaN(numeric)) return null;
-
-      if (suffix === 'k') return numeric * 1_000;
-      if (suffix === 'm') return numeric * 1_000_000;
-      if (suffix === 'b') return numeric * 1_000_000_000;
-      return numeric;
-    })
-    .filter((n): n is number => n !== null);
-
-  if (parsed.length === 0) return null;
-  return Math.max(...parsed);
-}
-
-function hasConfiguredPreference(values?: string[]): boolean {
-  return Array.isArray(values) && values.map((v) => String(v).trim()).filter(Boolean).length > 0;
-}
+import { calculateJobMatchScore, MATCH_THRESHOLD } from '../utils/jobMatching';
+import emailService from '../utils/emailService';
 
 export const getJobs = async (req: Request, res: Response) => {
   try {
@@ -122,7 +95,20 @@ export const getJobs = async (req: Request, res: Response) => {
       logger.warn('External job fetch failed', { error: externalError.message });
     }
 
-    const combinedJobs = [...localJobs, ...externalJobs];
+    let personalizedUser = null;
+    if ((req as AuthRequest).user?.userId && (req as AuthRequest).user?.role === 'jobseeker') {
+      personalizedUser = await User.findById((req as AuthRequest).user?.userId)
+        .select('skills jobTitle preferences');
+    }
+
+    const combinedJobs = [...localJobs, ...externalJobs].map((job: any) => {
+      if (!personalizedUser || job?.isExternal) return job;
+      const rawJob = typeof job.toObject === 'function' ? job.toObject() : job;
+      return {
+        ...rawJob,
+        matchScore: calculateJobMatchScore(personalizedUser as any, rawJob),
+      };
+    });
     const paginatedJobs = combinedJobs.slice(offset, offset + requestedLimit);
     const total = localTotal + externalTotal;
 
@@ -214,86 +200,16 @@ export const createJob = async (req: AuthRequest, res: Response) => {
 
     // Create notifications for candidate matches
     {
-      const normalizedTags = (job.tags || [])
-        .map((tag) => String(tag).trim().toLowerCase())
-        .filter(Boolean);
-
       const candidates = await User.find({
         role: 'jobseeker',
         _id: { $ne: req.user?.userId },
         'preferences.notifications.jobAlerts': { $ne: false },
-      }).select('_id skills preferences');
-      console.log("Total Candidates:", candidates.length);
-
-      const normalizedJobLocation = normalizeText(job.location || '');
-      const normalizedJobType = normalizeText(job.type || '');
-      const searchableJobText = normalizeText(
-        `${job.title || ''} ${job.company || ''} ${job.description || ''} ${job.requirements || ''}`
-      );
-      const jobSalaryUpper = parseSalaryUpperBound(job.salary || '');
+      }).select('_id name email skills jobTitle preferences');
 
       const matchedCandidates = candidates.filter((candidate) => {
-        const candidateSkills = (candidate.skills || [])
-          .map((skill) => normalizeText(String(skill)))
-          .filter(Boolean);
-
-        const skillsMatch =
-          normalizedTags.length === 0
-            ? true
-            : candidateSkills.length > 0 &&
-            candidateSkills.some((skill) =>
-              normalizedTags.some((tag) =>
-                skill.includes(tag) || tag.includes(skill)
-              )
-            );
-
-        const jobTypes = (candidate.preferences?.jobTypes || [])
-          .map((value) => normalizeText(String(value)))
-          .filter(Boolean);
-        const locations = (candidate.preferences?.locations || [])
-          .map((value) => normalizeText(String(value)))
-          .filter(Boolean);
-        const industries = (candidate.preferences?.industries || [])
-          .map((value) => normalizeText(String(value)))
-          .filter(Boolean);
-        const salaryRange = candidate.preferences?.salaryRange || [];
-
-        const typeConfigured = hasConfiguredPreference(jobTypes);
-        const locationConfigured = hasConfiguredPreference(locations);
-        const industryConfigured = hasConfiguredPreference(industries);
-        const salaryConfigured = Array.isArray(salaryRange) && salaryRange.length === 2;
-
-        const typeMatch = !typeConfigured || jobTypes.includes(normalizedJobType);
-        const locationMatch =
-          !locationConfigured ||
-          locations.some((locationPref) =>
-            normalizedJobLocation.includes(locationPref) || locationPref.includes(normalizedJobLocation)
-          );
-        const industryMatch =
-          !industryConfigured ||
-          industries.some((industryPref) => searchableJobText.includes(industryPref));
-        const salaryMatch =
-          !salaryConfigured ||
-          jobSalaryUpper === null ||
-          jobSalaryUpper >= Number(salaryRange[0] || 0);
-
-        const configuredPreferenceCount = [typeConfigured, locationConfigured, industryConfigured, salaryConfigured]
-          .filter(Boolean)
-          .length;
-        const matchedPreferenceCount = [
-          typeConfigured && typeMatch,
-          locationConfigured && locationMatch,
-          industryConfigured && industryMatch,
-          salaryConfigured && salaryMatch,
-        ].filter(Boolean).length;
-        const preferencesMatch =
-          configuredPreferenceCount > 0
-            ? matchedPreferenceCount > 0
-            : true;
-
-        return preferencesMatch && skillsMatch;
+        const matchScore = calculateJobMatchScore(candidate as any, job.toObject());
+        return matchScore >= MATCH_THRESHOLD;
       });
-      console.log("Matched Candidates:", matchedCandidates.length);
 
       if (matchedCandidates.length > 0) {
         const candidateIds = matchedCandidates.map((candidate) => candidate._id as mongoose.Types.ObjectId);
@@ -301,9 +217,22 @@ export const createJob = async (req: AuthRequest, res: Response) => {
           candidateIds,
           'job-match',
           `New job match: ${job.title}`,
-          `${job.company} is hiring for ${job.title}. This role matches your profile preferences.`,
+          `${job.company} is hiring for ${job.title}. This role matches your profile preferences by ${MATCH_THRESHOLD}% or more.`,
           job._id
         );
+        if (emailService.isConfigured()) {
+          await Promise.allSettled(
+            matchedCandidates.map((candidate: any) =>
+              emailService.sendJobMatchAlert(candidate.email, candidate.name || 'there', {
+                title: job.title,
+                company: job.company || 'Company',
+                location: job.location,
+                type: job.type,
+                salary: job.salary,
+              }),
+            ),
+          );
+        }
         logger.info(`Job "${job.title}" created. Matched ${matchedCandidates.length} candidates.`);
       }
     }
@@ -360,13 +289,28 @@ export const deleteJob = async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };;
     const userId = req.user?.userId;
 
-    const job = await Job.findOneAndDelete({ _id: id, employerId: userId });
+    const job = await Job.findOne({ _id: id, employerId: userId });
     if (!job) {
       return res.status(404).json({
         success: false,
         message: 'Job not found or unauthorized'
       });
     }
+
+    await Promise.all([
+      Job.deleteOne({ _id: id, employerId: userId }),
+      Application.deleteMany({ jobId: id }),
+      Interview.deleteMany({ jobId: id }),
+      Notification.deleteMany({ jobId: id }),
+      User.updateMany(
+        { savedJobs: id },
+        { $pull: { savedJobs: id } }
+      ),
+      User.updateMany(
+        { 'appliedJobs.jobId': id },
+        { $pull: { appliedJobs: { jobId: id } } }
+      ),
+    ]);
 
     return res.json({
       success: true,

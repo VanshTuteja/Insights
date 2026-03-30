@@ -24,10 +24,20 @@ class EmailService {
         });
     }
 
+    isConfigured(): boolean {
+        return Boolean(config.email.auth.user && config.email.auth.pass);
+    }
+
     async sendEmail(options: EmailOptions): Promise<void> {
         try {
+            if (!this.isConfigured()) {
+                throw new Error('SMTP is not configured');
+            }
+
             const mailOptions = {
-                from: `"${process.env.FROM_NAME}" <${process.env.FROM}>`,
+                from: process.env.FROM
+                    ? `"${process.env.FROM_NAME || 'JobFinder AI'}" <${process.env.FROM}>`
+                    : `"JobFinder AI" <${config.email.auth.user}>`,
                 to: options.to,
                 subject: options.subject,
                 html: options.html,
@@ -192,6 +202,36 @@ class EmailService {
             subject,
             html,
         });
+    }
+
+    async sendJobMatchAlert(email: string, name: string, job: { title: string; company: string; location?: string; type?: string; salary?: string }): Promise<void> {
+        const subject = `New Job Match for You: ${job.title}`;
+        const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${subject}</title>
+        </head>
+        <body style="font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;padding:24px;color:#0f172a;">
+          <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;border:1px solid #e2e8f0;">
+            <h1 style="margin:0 0 12px 0;font-size:24px;">A new job matches your preferences</h1>
+            <p style="margin:0 0 20px 0;color:#475569;">Hi ${name}, we found a newly posted role that matches your profile by 80% or more.</p>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+              <p style="margin:0 0 8px 0;font-size:20px;font-weight:700;">${job.title}</p>
+              <p style="margin:0 0 8px 0;color:#334155;">${job.company}</p>
+              <p style="margin:0;color:#64748b;">${job.location || 'Location not specified'}${job.type ? ` • ${job.type}` : ''}${job.salary ? ` • ${job.salary}` : ''}</p>
+            </div>
+            <p style="margin:20px 0 0 0;color:#475569;">Open JobFinder AI to review the full posting and apply.</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+        const text = `Hi ${name}, a new job matches your preferences by 80% or more.\n\n${job.title}\n${job.company}\n${job.location || 'Location not specified'}${job.type ? ` | ${job.type}` : ''}${job.salary ? ` | ${job.salary}` : ''}\n\nOpen JobFinder AI to review and apply.`;
+
+        await this.sendEmail({ to: email, subject, html, text });
     }
 }
 

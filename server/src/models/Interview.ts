@@ -60,6 +60,14 @@ const interviewSchema = new Schema<IInterview>({
   meetingLink: {
     type: String,
     maxlength: [500, 'Meeting link cannot exceed 500 characters']
+  },
+  candidateReminderSent: {
+    type: Boolean,
+    default: false
+  },
+  employerReminderSent: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

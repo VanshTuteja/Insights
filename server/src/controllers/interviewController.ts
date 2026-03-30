@@ -127,15 +127,19 @@ export async function uploadResponse(req: AuthRequest, res: Response) {
     if (idx < 0 || idx >= session.questions.length) return res.status(400).json({ error: 'Invalid question index' });
     const q = session.questions[idx];
     let transcript = '';
+    let transcriptSource: 'uploaded-media' | 'provided-text' | 'none' = 'none';
     let usedFallbackEvaluation = false;
     if (file?.buffer) {
       try {
         transcript = await transcribeAudio(file.buffer, file.mimetype);
+        transcriptSource = transcript.trim() ? 'uploaded-media' : 'none';
       } catch (e) {
         logger.warn('Transcription failed, using empty transcript', e);
       }
-    } else if (typeof req.body.transcript === 'string') {
+    }
+    if (!transcript.trim() && typeof req.body.transcript === 'string') {
       transcript = req.body.transcript;
+      transcriptSource = transcript.trim() ? 'provided-text' : 'none';
     }
     const normalizedTranscript = transcript.trim();
     let evaluation = normalizedTranscript
@@ -196,6 +200,7 @@ export async function uploadResponse(req: AuthRequest, res: Response) {
         sessionId: session._id,
         usedFallbackEvaluation,
         transcriptDetected: normalizedTranscript.length > 0,
+        transcriptSource,
       },
     });
   } catch (err: any) {

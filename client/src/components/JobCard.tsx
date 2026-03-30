@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, MapPin, Clock, DollarSign, Bookmark, BookmarkCheck } from 'lucide-react';
+import { Loader2, MapPin, Clock, IndianRupee, Bookmark, BookmarkCheck } from 'lucide-react';
+import { formatSalaryDisplay } from '@/lib/currency';
 
 interface Job {
   id: string;
@@ -66,8 +67,8 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
               <span className="truncate">{job.location}</span>
             </div>
             <div className="flex items-center space-x-1">
-              <DollarSign className="h-3.5 w-3.5 flex-shrink-0" />
-              <span className="truncate">{job.salary}</span>
+              <IndianRupee className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="truncate">{formatSalaryDisplay(job.salary)}</span>
             </div>
             <div className="flex items-center space-x-1">
               <Clock className="h-3.5 w-3.5 flex-shrink-0" />

@@ -155,7 +155,7 @@ const CreateJobDialog: React.FC<CreateJobDialogProps> = ({
               <Label htmlFor="salary">Salary Range *</Label>
               <Input
                 id="salary"
-                placeholder="e.g. $120k - $160k"
+                placeholder="e.g. Rs 12 LPA - Rs 18 LPA"
                 {...form.register('salary')}
               />
               {form.formState.errors.salary && (

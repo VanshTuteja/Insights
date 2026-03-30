@@ -4,6 +4,7 @@ import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import MobileSidebar from './MobileSidebar';
 import { Toaster } from '@/components/ui/sonner';
+import { Toaster as LegacyToaster } from '@/components/ui/toaster';
 
 const Layout: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -37,6 +38,7 @@ const Layout: React.FC = () => {
         </div>
       </div>
       <Toaster />
+      <LegacyToaster />
     </div>
   );
 };

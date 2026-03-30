@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import axios from 'axios';
 import {
   Briefcase,
   CheckCircle2,
@@ -899,7 +900,9 @@ const saveBlob = (blob: Blob, fileName: string) => {
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = fileName;
+  document.body.appendChild(anchor);
   anchor.click();
+  anchor.remove();
   window.URL.revokeObjectURL(url);
 };
 
@@ -919,6 +922,7 @@ const ResumeBuilder = () => {
   const [newSkill, setNewSkill] = useState('');
   const [newTool, setNewTool] = useState('');
   const [exportLoading, setExportLoading] = useState<'pdf' | 'docx' | null>(null);
+  const [improvingContent, setImprovingContent] = useState(false);
   const blueprint = ROLE_BLUEPRINTS[selectedRole];
   const theme = useThemeStore((state) => state.theme);
   const themePreview = useMemo(() => getThemePreview(theme), [theme]);
@@ -1056,7 +1060,7 @@ const ResumeBuilder = () => {
     });
   };
 
-  const autoImprove = () => {
+  const autoImprove = async () => {
     const jobKeywords = extractRoleKeywords(resume.jobDescription, blueprint);
     const keywordMerge = unique([...blueprint.keywords, ...jobKeywords]);
     const enhancementLine =
@@ -1066,51 +1070,85 @@ const ResumeBuilder = () => {
         ? 'Improved clarity and conversion through user-centered iteration, usability feedback, and stronger visual hierarchy.'
         : 'Delivered measurable improvements in quality, speed, and user outcomes using role-relevant tools and best practices.';
 
-    setResume((current) => ({
-      ...current,
-      personal: {
-        ...current.personal,
-        headline: current.personal.headline || blueprint.headline,
-      },
-      summary:
-        current.summary.length >= 80
-          ? current.summary
-          : `${blueprint.summary} Experienced in ${unique([...current.skills, ...jobKeywords]).slice(0, 6).join(', ')} with a strong focus on business impact, reliability, and professional execution.`,
-      skills: unique([...current.skills, ...blueprint.skills, ...jobKeywords]),
-      technicalSkills: current.technicalSkills || blueprint.technicalSkills,
-      tools: unique([...current.tools, ...blueprint.tools]),
-      achievements: unique([...current.achievements, ...blueprint.achievements]).slice(0, 4),
-      keywordBlock: keywordMerge.join(', '),
-      experience:
-        current.experience.length === 0
-          ? blueprint.experience
-          : current.experience.map((item, index) => {
-              const fallbackBullets = splitLines(blueprint.experience[index % blueprint.experience.length]?.bullets || '').slice(0, 2);
-              const existingBullets = splitLines(item.bullets);
-              const improvedBullets = unique([...existingBullets, ...fallbackBullets, enhancementLine]).slice(0, 4);
-              return {
-                ...item,
-                bullets: improvedBullets.join('\n'),
-              };
-            }),
-      projects:
-        current.projects.length === 0
-          ? blueprint.projects
-          : current.projects.map((item, index) => {
-              const fallback = splitLines(blueprint.projects[index % blueprint.projects.length]?.bullets || '').slice(0, 2);
-              return {
-                ...item,
-                bullets: unique([...splitLines(item.bullets), ...fallback]).slice(0, 3).join('\n'),
-              };
-            }),
-      education: current.education.length ? current.education : blueprint.education,
-      certifications: current.certifications.length ? current.certifications : blueprint.certifications,
-    }));
+    setImprovingContent(true);
+    try {
+      const { data } = await axios.post<{ success: boolean; data: ResumeCore }>(
+        '/resume/improve',
+        {
+          roleLabel: blueprint.label,
+          jobDescription: resume.jobDescription,
+          resume: {
+            ...resume,
+            personal: {
+              ...resume.personal,
+              headline: resume.personal.headline || blueprint.headline,
+            },
+            skills: unique([...resume.skills, ...jobKeywords]),
+            keywordBlock: resume.keywordBlock || keywordMerge.join(', '),
+          },
+        },
+      );
 
-    toast({
-      title: 'Resume improved',
-      description: `Added ${blueprint.label}-specific skills, stronger wording, and ATS-focused keyword coverage.`,
-    });
+      if (!data.success || !data.data) {
+        throw new Error('Resume improvement failed');
+      }
+
+      setResume(data.data);
+      toast({
+        title: 'Resume improved',
+        description: `Groq generated stronger ${blueprint.label}-focused content from your filled details.`,
+      });
+      return;
+    } catch (error: any) {
+      setResume((current) => ({
+        ...current,
+        personal: {
+          ...current.personal,
+          headline: current.personal.headline || blueprint.headline,
+        },
+        summary:
+          current.summary.length >= 80
+            ? current.summary
+            : `${blueprint.summary} Experienced in ${unique([...current.skills, ...jobKeywords]).slice(0, 6).join(', ')} with a strong focus on business impact, reliability, and professional execution.`,
+        skills: unique([...current.skills, ...blueprint.skills, ...jobKeywords]),
+        technicalSkills: current.technicalSkills || blueprint.technicalSkills,
+        tools: unique([...current.tools, ...blueprint.tools]),
+        achievements: unique([...current.achievements, ...blueprint.achievements]).slice(0, 4),
+        keywordBlock: keywordMerge.join(', '),
+        experience:
+          current.experience.length === 0
+            ? blueprint.experience
+            : current.experience.map((item, index) => {
+                const fallbackBullets = splitLines(blueprint.experience[index % blueprint.experience.length]?.bullets || '').slice(0, 2);
+                const existingBullets = splitLines(item.bullets);
+                const improvedBullets = unique([...existingBullets, ...fallbackBullets, enhancementLine]).slice(0, 4);
+                return {
+                  ...item,
+                  bullets: improvedBullets.join('\n'),
+                };
+              }),
+        projects:
+          current.projects.length === 0
+            ? blueprint.projects
+            : current.projects.map((item, index) => {
+                const fallback = splitLines(blueprint.projects[index % blueprint.projects.length]?.bullets || '').slice(0, 2);
+                return {
+                  ...item,
+                  bullets: unique([...splitLines(item.bullets), ...fallback]).slice(0, 3).join('\n'),
+                };
+              }),
+        education: current.education.length ? current.education : blueprint.education,
+        certifications: current.certifications.length ? current.certifications : blueprint.certifications,
+      }));
+
+      toast({
+        title: 'Resume improved with fallback',
+        description:
+          error.response?.data?.message || 'Groq was unavailable, so local ATS-focused improvements were applied instead.',
+      });
+    } finally {
+      setImprovingContent(false);
+    }
   };
 
   const resetDraft = () => {
@@ -1200,7 +1238,8 @@ const ResumeBuilder = () => {
         if (isHeading) y += 1;
       });
 
-      doc.save(`${fileStem}.pdf`);
+      const pdfBlob = doc.output('blob');
+      saveBlob(pdfBlob, `${fileStem}.pdf`);
       toast({
         title: 'PDF download ready',
         description: 'The resume has been exported as a clean ATS-friendly PDF.',
@@ -1310,9 +1349,14 @@ const ResumeBuilder = () => {
                     <Sparkles className="mr-2 h-4 w-4" />
                     Apply role starter
                   </Button>
-                  <Button variant="outline" className="border-primary/20 bg-background/30 hover:bg-accent/80" onClick={autoImprove}>
-                    <Wand2 className="mr-2 h-4 w-4" />
-                    Auto improve content
+                  <Button
+                    variant="outline"
+                    className="border-primary/20 bg-background/30 hover:bg-accent/80"
+                    onClick={() => void autoImprove()}
+                    disabled={improvingContent}
+                  >
+                    {improvingContent ? <LoadingSpinner /> : <Wand2 className="mr-2 h-4 w-4" />}
+                    {improvingContent ? 'Improving with Groq...' : 'Auto improve content'}
                   </Button>
                   <Button variant="outline" className="border-primary/20 bg-background/30 hover:bg-accent/80" onClick={resetDraft}>
                     <RefreshCw className="mr-2 h-4 w-4" />

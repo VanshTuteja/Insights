@@ -12,6 +12,7 @@ import { toast } from '@/hooks/use-toast';
 import { Search, BookmarkCheck, Trash2, Eye } from 'lucide-react';
 import axios from 'axios';
 import { useAuthStore } from '@/stores/authStore';
+import { formatSalaryDisplay } from '@/lib/currency';
 
 const SavedJobs: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,7 +34,7 @@ const SavedJobs: React.FC = () => {
           title: job.title,
           company: job.company,
           location: job.location,
-          salary: job.salary,
+          salary: formatSalaryDisplay(job.salary),
           type: job.type,
           tags: job.tags || [],
           description: job.description,

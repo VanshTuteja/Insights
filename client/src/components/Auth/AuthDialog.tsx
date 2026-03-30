@@ -60,6 +60,58 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ open, onOpenChange }) => {
     defaultValues: { name: '', email: '', password: '', role: 'jobseeker' as const },
   });
 
+  const getLoginToastCopy = (error: any) => {
+    switch (error?.code) {
+      case 'USER_NOT_FOUND':
+        return {
+          title: 'Account not found',
+          description: 'This email is not registered yet. Create an account to continue.',
+        };
+      case 'INVALID_PASSWORD':
+        return {
+          title: 'Incorrect password',
+          description: 'The password you entered is wrong. Please try again or reset it.',
+        };
+      case 'EMAIL_NOT_VERIFIED':
+        return {
+          title: 'Email verification required',
+          description: 'Please verify your email before signing in.',
+        };
+      default:
+        if (error?.status >= 500) {
+          return {
+            title: 'Sign in unavailable',
+            description: 'The server is having trouble right now. Please try again shortly.',
+          };
+        }
+        return {
+          title: 'Sign in failed',
+          description: error?.message || 'We could not sign you in. Please check your details and try again.',
+        };
+    }
+  };
+
+  const getSignupToastCopy = (error: any) => {
+    switch (error?.code) {
+      case 'USER_ALREADY_EXISTS':
+        return {
+          title: 'Account already exists',
+          description: 'This email is already registered. Try signing in instead.',
+        };
+      default:
+        if (error?.status >= 500) {
+          return {
+            title: 'Sign up unavailable',
+            description: 'We could not create your account right now. Please try again shortly.',
+          };
+        }
+        return {
+          title: 'Sign up failed',
+          description: error?.message || 'We could not create your account. Please try again.',
+        };
+    }
+  };
+
   const onLogin = async (data: z.infer<typeof loginSchema>) => {
     try {
       clearError();
@@ -104,9 +156,10 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ open, onOpenChange }) => {
         return;
       }
 
+      const loginToast = getLoginToastCopy(error);
       toast({
-        title: 'Login Failed',
-        description: error.message || 'Invalid email or password. Please try again.',
+        title: loginToast.title,
+        description: loginToast.description,
         variant: 'destructive',
       });
     }
@@ -123,9 +176,10 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ open, onOpenChange }) => {
         description: 'Please check your email for the verification code.',
       });
     } catch (error: any) {
+      const signupToast = getSignupToastCopy(error);
       toast({
-        title: 'Signup Failed',
-        description: error.message || 'Failed to send OTP. Please try again.',
+        title: signupToast.title,
+        description: signupToast.description,
         variant: 'destructive',
       });
     }

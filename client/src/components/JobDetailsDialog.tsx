@@ -10,7 +10,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, MapPin, DollarSign, Clock } from 'lucide-react';
+import { Loader2, MapPin, IndianRupee, Clock } from 'lucide-react';
+import { formatSalaryDisplay } from '@/lib/currency';
 
 interface Job {
   id: string;
@@ -71,8 +72,8 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
               <span className="text-sm">{job.location}</span>
             </div>
             <div className="flex items-center space-x-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{job.salary}</span>
+              <IndianRupee className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">{formatSalaryDisplay(job.salary)}</span>
             </div>
             <div className="flex items-center space-x-2">
               <Clock className="h-4 w-4 text-muted-foreground" />

@@ -17,6 +17,7 @@ import { getMissingProfileFields } from '@/lib/profileCompletion';
 import { useJobStore } from '@/stores/jobStore';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { formatSalaryDisplay, salaryFilterOptions } from '@/lib/currency';
 import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 
 const Jobs: React.FC = () => {
@@ -75,7 +76,7 @@ const Jobs: React.FC = () => {
     title: job.title,
     company: job.company,
     location: job.location,
-    salary: job.salary,
+    salary: formatSalaryDisplay(job.salary),
     type: job.type,
     tags: job.tags || [],
     description: job.description,
@@ -260,10 +261,11 @@ const Jobs: React.FC = () => {
                   <SelectValue placeholder="Salary Range" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="0-50k">$0 - $50k</SelectItem>
-                  <SelectItem value="50k-100k">$50k - $100k</SelectItem>
-                  <SelectItem value="100k-150k">$100k - $150k</SelectItem>
-                  <SelectItem value="150k+">$150k+</SelectItem>
+                  {salaryFilterOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

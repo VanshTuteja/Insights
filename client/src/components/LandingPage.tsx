@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import AuthDialog from '@/components/Auth/AuthDialog';
 import LandingNavbar from '@/components/Layout/LandingNavbar';
+import { Toaster } from '@/components/ui/sonner';
+import { Toaster as LegacyToaster } from '@/components/ui/toaster';
 import {
   Briefcase,
   Users,
@@ -380,6 +382,8 @@ const LandingPage: React.FC = () => {
       </section>
 
       <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} />
+      <Toaster />
+      <LegacyToaster />
       <Footer/>
     </div>
   );

@@ -82,6 +82,10 @@ const userSchema = new Schema<IUser>({
     trim: true
   }],
   preferences: {
+    preferredRoles: [{
+      type: String,
+      trim: true
+    }],
     jobTypes: [{
       type: String,
       enum: ['full-time', 'part-time', 'contract', 'remote', 'hybrid']
@@ -111,6 +115,9 @@ const userSchema = new Schema<IUser>({
   isVerified: {
     type: Boolean,
     default: false
+  },
+  lastLoginAt: {
+    type: Date,
   },
   otpHash: {
     type: String,

@@ -10,13 +10,13 @@ import {
   getSavedJobs,
   getEmployerJobs
 } from '../controllers/jobController';
-import { authenticateToken, requireCompletedProfile, requireRole } from '../middleware/auth';
+import { authenticateToken, optionalAuthenticateToken, requireCompletedProfile, requireRole } from '../middleware/auth';
 import { validateJobCreation } from '../middleware/validation';
 
 const router = express.Router();
 
 // Public: list all jobs and get single job by id
-router.get('/', getJobs);
+router.get('/', optionalAuthenticateToken, getJobs);
 
 // Specific paths MUST come before /:id or Express will match "saved" and "employer" as id
 router.get('/saved/list', authenticateToken, requireRole('jobseeker'), requireCompletedProfile, getSavedJobs);

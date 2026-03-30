@@ -122,7 +122,11 @@ const Settings: React.FC = () => {
         website: form.website.trim(),
         bio: form.bio.trim(),
         preferences: {
-          ...(user?.preferences || {}),
+          preferredRoles: user?.preferences?.preferredRoles || [],
+          jobTypes: user?.preferences?.jobTypes || [],
+          salaryRange: user?.preferences?.salaryRange || [50000, 150000],
+          locations: user?.preferences?.locations || [],
+          industries: user?.preferences?.industries || [],
           notifications: form.notifications,
           privacy: form.privacy,
         },

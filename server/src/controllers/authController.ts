@@ -6,15 +6,68 @@ import emailService from '../utils/emailService';
 import { AuthRequest, LoginRequest, UpdateProfileRequest, ApiResponse } from '../types';
 import { generateToken } from '../middleware/auth';
 import { withProfileCompletion } from '../utils/profileCompletion';
+import config from '../config';
 
 type OtpPurpose = 'verify-email' | 'reset-password';
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000; // 60 seconds
-
 const generateOTP = (): string => Math.floor(100000 + Math.random() * 900000).toString();
 const hashOTP = (otp: string): string => crypto.createHash('sha256').update(otp).digest('hex');
 const now = () => new Date();
+
+async function sendOtpOrFail(email: string, otp: string, purpose: OtpPurpose) {
+  const emailType = purpose === 'reset-password' ? 'password-reset' : 'signup';
+  if (!emailService.isConfigured()) {
+    throw new Error('Email service is not configured. Please set SMTP credentials.');
+  }
+  await emailService.sendOTPEmail(email, otp, emailType);
+}
+
+async function ensureDefaultAdmin(email: string, password: string) {
+  if (email.toLowerCase() !== config.admin.email.toLowerCase() || password !== config.admin.password) {
+    return null;
+  }
+
+  let adminUser: any = await User.findOne({ email }).select('+passwordHash +isVerified');
+  if (!adminUser) {
+    adminUser = new User({
+      name: 'Vansh Tuteja',
+      email,
+      passwordHash: password,
+      role: 'admin',
+      isVerified: true,
+    });
+    await adminUser.save();
+    return adminUser;
+  }
+
+  let shouldSave = false;
+  if (adminUser.role !== 'admin') {
+    adminUser.role = 'admin';
+    shouldSave = true;
+  }
+  if (adminUser.name !== 'Vansh Tuteja') {
+    adminUser.name = 'Vansh Tuteja';
+    shouldSave = true;
+  }
+  if (!adminUser.isVerified) {
+    adminUser.isVerified = true;
+    shouldSave = true;
+  }
+  const passwordMatches = await adminUser.comparePassword(password);
+  if (!passwordMatches) {
+    adminUser.passwordHash = password;
+    shouldSave = true;
+  }
+
+  if (shouldSave) {
+    await adminUser.save();
+    adminUser = await User.findOne({ email }).select('+passwordHash +isVerified');
+  }
+
+  return adminUser;
+}
 
 export const login = async (req: Request<{}, ApiResponse, LoginRequest>, res: Response) => {
   try {
@@ -22,13 +75,16 @@ export const login = async (req: Request<{}, ApiResponse, LoginRequest>, res: Re
 
     logger.debug('Login attempt', { email });
 
+    await ensureDefaultAdmin(email, password);
+
     // Find user and include password for comparison
     const user = await User.findOne({ email }).select('+passwordHash +isVerified');
     if (!user) {
       logger.auth('login', undefined, email, false, 'User not found');
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'No account found with this email address.',
+        data: { code: 'USER_NOT_FOUND' }
       });
     }
 
@@ -46,14 +102,17 @@ export const login = async (req: Request<{}, ApiResponse, LoginRequest>, res: Re
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       logger.auth('login', user._id.toString(), email, false, 'Invalid password');
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'The password you entered is incorrect.',
+        data: { code: 'INVALID_PASSWORD' }
       });
     }
 
     // Generate token
     const token = generateToken(user._id.toString());
+    user.lastLoginAt = now();
+    await user.save();
 
     logger.auth('login', user._id.toString(), email, true);
 
@@ -110,7 +169,8 @@ export const signup = async (req: Request, res: Response) => {
     if (existingUser && existingUser.isVerified) {
       return res.status(400).json({
         success: false,
-        message: 'User already exists with this email'
+        message: 'An account with this email already exists.',
+        data: { code: 'USER_ALREADY_EXISTS' }
       });
     }
 
@@ -146,13 +206,7 @@ export const signup = async (req: Request, res: Response) => {
       await user.save();
     }
 
-    // Send OTP email
-    // await emailService.sendOTPEmail(email, otp, 'signup');
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await emailService.sendOTPEmail(email, otp, 'signup');
-    } else {
-      console.log(`OTP (DEV MODE): ${otp}`);
-    }
+    await sendOtpOrFail(email, otp, 'verify-email');
 
     logger.info('OTP sent successfully', { email });
 
@@ -271,12 +325,7 @@ export const resendOTP = async (req: Request, res: Response) => {
     user.otpResendAvailableAt = new Date(Date.now() + OTP_RESEND_COOLDOWN_MS);
     await user.save();
 
-    // await emailService.sendOTPEmail(email, otp, otpPurpose === 'verify-email' ? 'signup' : 'password-reset');
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await emailService.sendOTPEmail(email, otp, 'signup');
-    } else {
-      console.log(`OTP (DEV MODE): ${otp}`);
-    }
+    await sendOtpOrFail(email, otp, otpPurpose);
 
     return res.json({ success: true, message: 'OTP resent successfully' });
   } catch (error: any) {
@@ -329,7 +378,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
     user.otpResendAvailableAt = new Date(Date.now() + OTP_RESEND_COOLDOWN_MS);
     await user.save();
 
-    await emailService.sendOTPEmail(email, otp, 'password-reset');
+    await sendOtpOrFail(email, otp, 'reset-password');
 
     logger.info('Password reset OTP sent', { email, userId: user._id });
 

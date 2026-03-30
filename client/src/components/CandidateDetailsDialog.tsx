@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { downloadResumeFile, openResumeFile } from '@/lib/resume';
+import { toast } from '@/hooks/use-toast';
 import { 
   Mail, 
   Phone, 
@@ -19,13 +21,15 @@ import {
   Briefcase, 
   GraduationCap,
   Download,
-  MessageCircle,
+  ExternalLink,
   User
 } from 'lucide-react';
 
 interface Candidate {
   id: string;
   candidateId?: string;
+  jobId?: string;
+  applicationId?: string;
   candidateName: string;
   position: string;
   applied: string;
@@ -46,17 +50,42 @@ interface CandidateDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onContact: (candidateId: string) => void;
-  onScheduleInterview?: (candidateId: string) => void;
+  onScheduleInterview?: (candidateId: string, jobId?: string, applicationId?: string) => void;
 }
 
 const CandidateDetailsDialog: React.FC<CandidateDetailsDialogProps> = ({
   candidate,
   open,
   onOpenChange,
-  onContact,
   onScheduleInterview,
 }) => {
   if (!candidate) return null;
+
+  const handleResumeView = async () => {
+    if (!candidate.candidateId) return;
+    try {
+      await openResumeFile(candidate.candidateId);
+    } catch (error: any) {
+      toast({
+        title: 'Could not open resume',
+        description: error.message || 'Please try downloading the resume instead.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleResumeDownload = async () => {
+    if (!candidate.candidateId) return;
+    try {
+      await downloadResumeFile(candidate.candidateId, candidate.candidateName);
+    } catch (error: any) {
+      toast({
+        title: 'Could not download resume',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -174,22 +203,25 @@ const CandidateDetailsDialog: React.FC<CandidateDetailsDialogProps> = ({
             <Button
               variant="outline"
               size="lg"
-              asChild
               disabled={!candidate.resumeUrl}
+              onClick={() => void handleResumeView()}
             >
-              <a
-                href={candidate.resumeUrl || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download Resume
-              </a>
+              <ExternalLink className="h-4 w-4 mr-2" />
+              View Resume
             </Button>
             <Button
               variant="outline"
               size="lg"
-              onClick={() => onScheduleInterview?.(candidate.candidateId ?? candidate.id)}
+              disabled={!candidate.resumeUrl}
+              onClick={() => void handleResumeDownload()}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Resume (PDF)
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => onScheduleInterview?.(candidate.candidateId ?? candidate.id, candidate.jobId, candidate.applicationId)}
             >
               <Calendar className="h-4 w-4 mr-2" />
               Schedule Interview

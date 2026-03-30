@@ -12,11 +12,13 @@ import Interviews from '@/pages/Interviews';
 import ResumeBuilder from '@/pages/ResumeBuilder';
 import InterviewPrep from '@/pages/InterviewPrep';
 import Insights from '@/pages/Insights';
+import HelpSupport from '@/pages/HelpSupport';
+import Settings from '@/pages/Settings';
 import EmployerDashboard from '@/pages/EmployerDashboard';
-import Messaging from '@/pages/Messaging';
-import Settings from './components/Settings';
+import EmployerInterviews from '@/pages/EmployerInterviews';
+import AdminDashboard from '@/pages/AdminDashboard';
+import AdminInsights from '@/pages/AdminInsights';
 import Profile from './pages/Profile';
-import HelpSupport from './pages/HelpSupport';
 import Applications from './pages/Applications';
 
 const AppRoutes: React.FC = () => {
@@ -29,10 +31,11 @@ const AppRoutes: React.FC = () => {
 
   const isJobSeeker = user.role === 'jobseeker';
   const isEmployer = user.role === 'employer';
+  const isAdmin = user.role === 'admin';
   const profileComplete = isProfileComplete(user);
-  const allowIncompleteRoute = ['/profile', '/help', '/settings'].includes(location.pathname);
+  const allowIncompleteRoute = ['/profile', '/admin', '/admin/insights'].includes(location.pathname);
 
-  if (!profileComplete && !allowIncompleteRoute) {
+  if (!isAdmin && !profileComplete && !allowIncompleteRoute) {
     return <Navigate to="/profile" replace />;
   }
 
@@ -42,7 +45,9 @@ const AppRoutes: React.FC = () => {
         <Route
           index
           element={
-            !profileComplete ? (
+            isAdmin ? (
+              <Navigate to="/admin" replace />
+            ) : !profileComplete ? (
               <Navigate to="/profile" replace />
             ) : isEmployer ? (
               <Navigate to="/employer" replace />
@@ -81,16 +86,34 @@ const AppRoutes: React.FC = () => {
           path="insights"
           element={isJobSeeker || isEmployer ? <Insights /> : <Navigate to="/" replace />}
         />
+        <Route
+          path="settings"
+          element={isJobSeeker || isEmployer ? <Settings /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="help"
+          element={isJobSeeker || isEmployer ? <HelpSupport /> : <Navigate to="/" replace />}
+        />
 
         {/* Employer routes */}
         <Route
           path="employer"
           element={isEmployer ? <EmployerDashboard /> : <Navigate to="/" replace />}
         />
+        <Route
+          path="admin"
+          element={isAdmin ? <AdminDashboard /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="admin/insights"
+          element={isAdmin ? <AdminInsights /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="employer/interviews"
+          element={isEmployer ? <EmployerInterviews /> : <Navigate to="/" replace />}
+        />
         {/* <Route path="messaging" element={<Messaging />} /> */}
         <Route path="profile" element={<Profile />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="help" element={<HelpSupport />} />
       </Route>
     </Routes>
   );

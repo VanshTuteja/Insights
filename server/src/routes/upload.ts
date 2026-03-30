@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'fs/promises';
 import path from 'path';
+import { createReadStream } from 'fs';
 import { authenticateToken, requireRole } from '../middleware/auth';
 import User from '../models/Users';
 import { AuthRequest } from '../types';
@@ -14,16 +15,19 @@ const resumeUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
-    if (allowed.includes(file.mimetype)) {
+    const normalizedName = (file.originalname || '').toLowerCase();
+    const normalizedType = (file.mimetype || '').toLowerCase();
+    const isPdf =
+      normalizedName.endsWith('.pdf') ||
+      normalizedType === 'application/pdf' ||
+      normalizedType === 'application/x-pdf' ||
+      normalizedType === 'binary/octet-stream' ||
+      normalizedType === 'application/octet-stream';
+    if (isPdf) {
       cb(null, true);
       return;
     }
-    cb(new Error('Only PDF and Word documents are allowed'));
+    cb(new Error('Only PDF resumes are allowed'));
   },
 });
 
@@ -51,7 +55,7 @@ const saveBufferLocally = async (
   userId: string,
 ) => {
   await ensureUploadsDir();
-  const ext = path.extname(file.originalname || '') || (prefix === 'avatar' ? '.png' : '.bin');
+  const ext = prefix === 'resume' ? '.pdf' : path.extname(file.originalname || '') || '.png';
   const fileName = `${prefix}_${userId}_${Date.now()}${sanitizeName(ext)}`;
   const filePath = path.join(uploadsDir, fileName);
   await fs.writeFile(filePath, file.buffer);
@@ -74,15 +78,7 @@ router.post(
         return res.status(401).json({ success: false, message: 'Unauthorized' });
       }
 
-      const resumeUrl = isCloudinaryConfigured()
-        ? (
-            await uploadBufferToCloudinary(req.file.buffer, {
-              folder: 'jobfinder/resumes',
-              resource_type: 'raw',
-              public_id: `resume_${userId}_${Date.now()}`,
-            })
-          ).secure_url
-        : await saveBufferLocally(req.file, 'resume', userId);
+      const resumeUrl = await saveBufferLocally(req.file, 'resume', userId);
 
       const user = await User.findByIdAndUpdate(
         userId,
@@ -150,6 +146,68 @@ router.post(
         data: { avatar },
         message: 'Avatar uploaded successfully',
       });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: 'Server error',
+        error: error.message,
+      });
+    }
+  },
+);
+
+router.get(
+  '/resume/download/:userId?',
+  authenticateToken,
+  async (req: AuthRequest<{ userId?: string }>, res) => {
+    try {
+      const currentUserId = req.user?.userId;
+      const requestedUserId = req.params.userId || currentUserId;
+
+      if (!currentUserId || !requestedUserId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const canAccess =
+        requestedUserId === currentUserId ||
+        req.user?.role === 'employer' ||
+        req.user?.role === 'admin';
+
+      if (!canAccess) {
+        return res.status(403).json({ success: false, message: 'Not authorized to download this resume' });
+      }
+
+      const user = await User.findById(requestedUserId).select('name resumeUrl');
+      if (!user?.resumeUrl) {
+        return res.status(404).json({ success: false, message: 'Resume not found' });
+      }
+
+      const fileName = `${(user.name || 'resume').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'resume'}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+      if (user.resumeUrl.startsWith('/uploads/')) {
+        const localPath = path.join(process.cwd(), user.resumeUrl.replace(/^\/+/, ''));
+        const stream = createReadStream(localPath);
+        stream.on('error', () => {
+          if (!res.headersSent) {
+            res.status(404).json({ success: false, message: 'Resume file is unavailable' });
+          }
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      const response = await fetch(user.resumeUrl);
+      if (!response.ok) {
+        return res.status(404).json({
+          success: false,
+          message: 'Stored resume file could not be reached. Please upload your resume again.',
+        });
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      return res.send(Buffer.from(arrayBuffer));
     } catch (error: any) {
       return res.status(500).json({
         success: false,
