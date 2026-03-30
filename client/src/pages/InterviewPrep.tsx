@@ -1,66 +1,100 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import AnimatedSection from '@/components/AnimatedSection';
 import InterviewReport from '@/components/interview/InterviewReport';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuthStore } from '@/stores/authStore';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import { useFaceMetrics } from '@/hooks/useFaceMetrics';
-import { interviewApi, type DifficultyLevel, type Evaluation, type InterviewCategory, type QuestionItem } from '@/lib/interviewApi';
+import { interviewApi, type AnswerEvaluation, type CompleteInterviewResponse, type InterviewHistoryItem, type InterviewQuestion, type InterviewState } from '@/lib/interviewApi';
+import { useAuthStore } from '@/stores/authStore';
 import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import {
   AlertCircle,
   Camera,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  History,
+  Check,
   Loader2,
   Mic,
+  MicOff,
   Play,
-  RotateCcw,
-  ShieldCheck,
-  Sparkles,
   Square,
-  Target,
+  UserCircle2,
   VideoOff,
+  WandSparkles,
 } from 'lucide-react';
 
-const CATEGORIES: { name: InterviewCategory; label: string }[] = [
-  { name: 'Technical', label: 'Technical' },
-  { name: 'Behavioral', label: 'Behavioral' },
-  { name: 'Leadership', label: 'Leadership' },
-  { name: 'Problem Solving', label: 'Problem Solving' },
-  { name: 'System Design', label: 'System Design' },
-  { name: 'HR', label: 'HR' },
-  { name: 'Combined', label: 'Combined (Random)' },
-];
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+  onend: (() => void) | null;
+};
 
-const DIFFICULTIES: { value: DifficultyLevel; label: string }[] = [
-  { value: 'beginner', label: 'Beginner' },
-  { value: 'intermediate', label: 'Intermediate' },
-  { value: 'advanced', label: 'Advanced' },
-];
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: ArrayLike<{
+    isFinal: boolean;
+    0: {
+      transcript: string;
+    };
+  }>;
+};
 
-const QUESTION_TIME_LIMIT = 90;
-const RECORDER_MIME_TYPES = [
-  'video/webm;codecs=vp9,opus',
-  'video/webm;codecs=vp8,opus',
-  'video/webm',
-  'audio/webm;codecs=opus',
-  'audio/webm',
-  'audio/mp4',
-];
-
-function pickSupportedMimeType() {
-  if (typeof MediaRecorder === 'undefined') return '';
-  return RECORDER_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+declare global {
+  interface Window {
+    SpeechRecognition?: new () => BrowserSpeechRecognition;
+    webkitSpeechRecognition?: new () => BrowserSpeechRecognition;
+  }
 }
 
-function hasUsableTracks(stream: MediaStream | null) {
-  return Boolean(stream && stream.getTracks().some((track) => track.readyState === 'live' && track.enabled));
+const TOTAL_QUESTIONS = 5;
+const DEFAULT_ROLES = [
+  'Frontend Developer',
+  'Backend Developer',
+  'Full Stack Developer',
+  'MERN Stack Developer',
+  'React Developer',
+  'Node.js Developer',
+  'Software Engineer',
+  'Other',
+] as const;
+
+function getStateLabel(state: InterviewState) {
+  if (state === 'asking') return 'AI is asking';
+  if (state === 'listening') return 'Listening';
+  if (state === 'processing') return 'Processing';
+  if (state === 'feedback') return 'Feedback ready';
+  if (state === 'completed') return 'Completed';
+  return 'Idle';
+}
+
+function getAverageConfidence(questions: InterviewQuestion[]) {
+  const answered = questions.filter((item) => item.answer.trim());
+  if (!answered.length) return 0;
+  return Math.round(answered.reduce((sum, item) => sum + item.confidence, 0) / answered.length);
+}
+
+function normalizeQuestionText(question?: string) {
+  if (!question) return '';
+  return question
+    .replace(/\*\*/g, '')
+    .replace(/^here(?:'s| is).+?:/i, '')
+    .replace(/^question\s*:?\s*/i, '')
+    .replace(/\s*(evaluation criteria|follow-up prompts?)\s*:.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeQuestionItem(question: InterviewQuestion): InterviewQuestion {
+  return {
+    ...question,
+    question: normalizeQuestionText(question.question),
+  };
 }
 
 export default function InterviewPrep() {
@@ -68,300 +102,284 @@ export default function InterviewPrep() {
   const theme = useThemeStore((state) => state.theme);
   const themePreview = useMemo(() => getThemePreview(theme), [theme]);
   const darkTheme = isDarkTheme(theme);
+
+  const [selectedRole, setSelectedRole] = useState<(typeof DEFAULT_ROLES)[number]>('Full Stack Developer');
+  const [customRole, setCustomRole] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [category, setCategory] = useState<InterviewCategory | null>(null);
-  const [difficulty, setDifficulty] = useState<DifficultyLevel>('intermediate');
-  const [questions, setQuestions] = useState<QuestionItem[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [sessionComplete, setSessionComplete] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [timeRemaining, setTimeRemaining] = useState(QUESTION_TIME_LIMIT);
-  const [isRecording, setIsRecording] = useState(false);
-  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [recordingMode, setRecordingMode] = useState<'video' | 'audio'>('video');
-  const [permissionState, setPermissionState] = useState<'idle' | 'granted' | 'fallback-audio' | 'denied'>('idle');
-  const [lastEvaluation, setLastEvaluation] = useState<Evaluation | null>(null);
-  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [interviewState, setInterviewState] = useState<InterviewState>('idle');
+  const [currentQuestion, setCurrentQuestion] = useState<InterviewQuestion | null>(null);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [questions, setQuestions] = useState<InterviewQuestion[]>([]);
+  const [transcript, setTranscript] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [lastEvaluation, setLastEvaluation] = useState<AnswerEvaluation | null>(null);
+  const [report, setReport] = useState<CompleteInterviewResponse | null>(null);
+  const [history, setHistory] = useState<InterviewHistoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showEvaluation, setShowEvaluation] = useState(false);
-  const [history, setHistory] = useState<any[]>([]);
-  const [loadingQuestions, setLoadingQuestions] = useState(false);
-  const [nextQuestionIndex, setNextQuestionIndex] = useState<number | null>(null);
-  const [evaluationMeta, setEvaluationMeta] = useState<{ usedFallbackEvaluation: boolean; transcriptDetected: boolean } | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [mediaReady, setMediaReady] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
 
-  const { liveMetrics, getFinalMetrics, loading: faceLoading, sampleCount } = useFaceMetrics({
-    videoRef,
-    isActive: isRecording && recordingMode === 'video',
-  });
+  const resolvedRole = selectedRole === 'Other' ? customRole.trim() : selectedRole;
 
-  const currentQuestion = questions[currentIndex];
-  const isLastQuestion = currentIndex >= questions.length - 1;
-  const latestSession = history[0] ?? null;
   const pageShellStyle = {
     backgroundImage: darkTheme
-      ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.2), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.14), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.95) 100%)'
-      : 'radial-gradient(circle at top left, hsl(var(--primary) / 0.1), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.16), transparent 22%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.74) 52%, hsl(var(--background)) 100%)',
+      ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.2), transparent 26%), radial-gradient(circle at top right, hsl(var(--accent) / 0.12), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.94) 100%)'
+      : 'radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 30%), radial-gradient(circle at top right, hsl(var(--accent) / 0.16), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.75) 52%, hsl(var(--background)) 100%)',
   };
-  const sectionCardClass = cn(
+
+  const cardClass = cn(
     'border shadow-premium-lg backdrop-blur',
-    darkTheme ? 'border-primary/15 bg-card/80' : 'border-border/80 bg-card/95',
-  );
-  const mutedPanelClass = cn(
-    'rounded-2xl border p-4',
-    darkTheme ? 'border-border/60 bg-background/50' : 'border-border bg-slate-50',
+    darkTheme ? 'border-primary/15 bg-card/80' : 'border-border/80 bg-card/95'
   );
 
-  useEffect(() => {
-    if (!isRecording || timeRemaining <= 0) return;
-    const timer = setInterval(() => setTimeRemaining((remaining) => remaining - 1), 1000);
-    return () => clearInterval(timer);
-  }, [isRecording, timeRemaining]);
+  const setupMedia = useCallback(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    streamRef.current = stream;
+    setMediaReady(true);
 
-  useEffect(() => {
-    if (isRecording && timeRemaining === 0) stopRecording();
-  }, [isRecording, timeRemaining]);
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play().catch(() => undefined);
+    }
+  }, []);
 
-  const requestMedia = useCallback(async () => {
-    setError(null);
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+  }, []);
+
+  const speakQuestion = useCallback(async (audioUrl?: string) => {
+    if (!audioUrl) return;
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+
+    audioRef.current.src = audioUrl;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setPermissionState('granted');
-      setRecordingMode('video');
-      setMediaStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        void videoRef.current.play().catch(() => {});
-      }
-      return stream;
-    } catch (videoError) {
-      try {
-        const audioOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        setPermissionState('fallback-audio');
-        setRecordingMode('audio');
-        setMediaStream(audioOnlyStream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
-        }
-        setError('Camera unavailable. Audio-only practice is enabled.');
-        return audioOnlyStream;
-      } catch (audioError) {
-        setPermissionState('denied');
-        setError('Camera/microphone permissions are blocked. Please allow access and try again.');
-        throw audioError ?? videoError;
-      }
+      await audioRef.current.play();
+    } catch {
+      setError('Question audio could not autoplay. Use the browser play controls or interact with the page first.');
+    }
+  }, []);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const items = await interviewApi.getHistory();
+      setHistory(items);
+    } catch {
+      setHistory([]);
     }
   }, []);
 
   useEffect(() => {
+    void loadHistory();
     return () => {
-      mediaStream?.getTracks().forEach((track) => track.stop());
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      recognitionRef.current?.stop();
+      audioRef.current?.pause();
     };
-  }, [mediaStream]);
+  }, [loadHistory]);
 
-  const startRecording = useCallback(async () => {
-    try {
-      let stream = mediaStream;
-      if (!hasUsableTracks(stream)) stream = await requestMedia();
-      if (typeof MediaRecorder === 'undefined') throw new Error('This browser does not support recording.');
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
+  const ensureRecognition = useCallback(() => {
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      throw new Error('Web Speech API is not supported in this browser.');
+    }
 
-      const mimeType = pickSupportedMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream!, { mimeType }) : new MediaRecorder(stream!);
-      recordedChunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        mediaRecorderRef.current = null;
-        const blobType = mimeType || recordedChunksRef.current[0]?.type || 'audio/webm';
-        if (recordedChunksRef.current.length === 0) {
-          setRecordedBlob(null);
-          setError('No recording was captured. Please try again.');
-          return;
+    if (recognitionRef.current) {
+      return recognitionRef.current;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let finalText = '';
+      let interimText = '';
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const chunk = event.results[index][0]?.transcript || '';
+        if (event.results[index].isFinal) {
+          finalText += `${chunk} `;
+        } else {
+          interimText += chunk;
         }
-        setRecordedBlob(new Blob(recordedChunksRef.current, { type: blobType }));
-      };
-      recorder.onerror = () => {
-        mediaRecorderRef.current = null;
-        setIsRecording(false);
-        setError('Recording failed. Please allow microphone access and try again.');
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start(1000);
-      setRecordedBlob(null);
-      setLastEvaluation(null);
-      setLastTranscript(null);
-      setShowEvaluation(false);
-      setEvaluationMeta(null);
-      setNextQuestionIndex(null);
-      setTimeRemaining(QUESTION_TIME_LIMIT);
-      setIsRecording(true);
-    } catch (err) {
-      setError((err as Error)?.message || 'Failed to start recording.');
-    }
-  }, [mediaStream, requestMedia]);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      if (typeof mediaRecorderRef.current.requestData === 'function') {
-        mediaRecorderRef.current.requestData();
       }
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
+
+      if (finalText) {
+        setTranscript((current) => `${current} ${finalText}`.trim());
+      }
+      setLiveTranscript(interimText.trim());
+    };
+
+    recognition.onerror = (event) => {
+      setError(event.error === 'not-allowed'
+        ? 'Microphone permission is blocked. Please allow mic access and try again.'
+        : 'Speech recognition stopped unexpectedly.');
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    return recognition;
   }, []);
 
-  const submitResponse = useCallback(async () => {
-    if (!sessionId || !recordedBlob) {
-      setError('No recording to submit. Record your answer first.');
+  const startInterview = useCallback(async () => {
+    if (!resolvedRole) {
+      setError('Choose a role first. If you selected Other, enter a custom profile name.');
       return;
     }
 
-    setUploading(true);
+    setLoading(true);
     setError(null);
-    try {
-      const confidenceMetrics = getFinalMetrics() ?? undefined;
-      const data = await interviewApi.uploadResponse(sessionId, currentIndex, recordedBlob, confidenceMetrics);
-      setLastTranscript(data.transcript);
-      setLastEvaluation(data.evaluation);
-      setEvaluationMeta({
-        usedFallbackEvaluation: Boolean(data.usedFallbackEvaluation),
-        transcriptDetected: Boolean(data.transcriptDetected),
-      });
-      setShowEvaluation(true);
-      setRecordedBlob(null);
-      recordedChunksRef.current = [];
-      setNextQuestionIndex(data.nextQuestionIndex);
-
-      if (data.isComplete) {
-        const finalResult = await interviewApi.getResult(sessionId);
-        setResult(finalResult);
-        setSessionComplete(true);
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  }, [currentIndex, getFinalMetrics, recordedBlob, sessionId]);
-
-  const nextQuestion = useCallback(() => {
-    setShowEvaluation(false);
+    setReport(null);
     setLastEvaluation(null);
-    setLastTranscript(null);
-    setEvaluationMeta(null);
-    setRecordedBlob(null);
-    recordedChunksRef.current = [];
-    setCurrentIndex((index) => (nextQuestionIndex != null ? nextQuestionIndex : index + 1));
-    setNextQuestionIndex(null);
-    setTimeRemaining(QUESTION_TIME_LIMIT);
-  }, [nextQuestionIndex]);
+    setTranscript('');
+    setLiveTranscript('');
 
-  const startInterview = useCallback(async (selectedCategory: InterviewCategory) => {
-    setError(null);
-    setLoadingQuestions(true);
-    setCategory(selectedCategory);
     try {
-      const data = await interviewApi.start(selectedCategory, difficulty);
-      const allQuestions: QuestionItem[] = [data.question];
-      for (let index = 1; index < data.totalQuestions; index += 1) {
-        const next = await interviewApi.getQuestion(data.sessionId, index);
-        allQuestions.push(next.question);
-      }
+      await setupMedia();
+      const data = await interviewApi.start(resolvedRole);
+      const normalizedQuestion = normalizeQuestionItem(data.question);
       setSessionId(data.sessionId);
-      setQuestions(allQuestions);
-      setCurrentIndex(0);
-      setSessionComplete(false);
-      setResult(null);
-      setTimeRemaining(QUESTION_TIME_LIMIT);
-      setLastEvaluation(null);
-      setLastTranscript(null);
-      setShowEvaluation(false);
-      setRecordedBlob(null);
-      setNextQuestionIndex(null);
-      setEvaluationMeta(null);
+      setInterviewState(data.state);
+      setQuestionIndex(data.currentQuestionIndex);
+      setCurrentQuestion(normalizedQuestion);
+      setQuestions([normalizedQuestion]);
+      await speakQuestion(normalizedQuestion.audioUrl);
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to start interview');
+      setError(err.message || 'Failed to start the interview.');
     } finally {
-      setLoadingQuestions(false);
+      setLoading(false);
     }
-  }, [difficulty]);
+  }, [resolvedRole, setupMedia, speakQuestion]);
 
-  const reset = useCallback(() => {
-    setSessionId(null);
-    setCategory(null);
-    setQuestions([]);
-    setCurrentIndex(0);
-    setSessionComplete(false);
-    setResult(null);
-    setLastEvaluation(null);
-    setLastTranscript(null);
-    setShowEvaluation(false);
-    setRecordedBlob(null);
-    setNextQuestionIndex(null);
-    setEvaluationMeta(null);
+  const startListening = useCallback(() => {
+    try {
+      const recognition = ensureRecognition();
+      setTranscript('');
+      setLiveTranscript('');
+      setLastEvaluation(null);
+      setInterviewState('listening');
+      setError(null);
+      recognition.start();
+      setIsListening(true);
+    } catch (err: any) {
+      setError(err.message || 'Unable to start speech recognition.');
+    }
+  }, [ensureRecognition]);
+
+  const submitAnswer = useCallback(async () => {
+    if (!sessionId) return;
+    const answerText = `${transcript} ${liveTranscript}`.trim();
+    if (!answerText) {
+      setError('No answer was transcribed. Please speak and try again.');
+      return;
+    }
+
+    stopListening();
+    setLoading(true);
+    setInterviewState('processing');
     setError(null);
-    setIsRecording(false);
-    mediaRecorderRef.current = null;
-    recordedChunksRef.current = [];
-    mediaStream?.getTracks().forEach((track) => track.stop());
-    setMediaStream(null);
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
+
+    try {
+      const result = await interviewApi.answer(sessionId, answerText);
+      setInterviewState(result.state);
+      setLastEvaluation(result.evaluation);
+      setQuestions((current) => current.map((item, index) => (
+        index === result.questionIndex
+          ? {
+              ...item,
+              answer: answerText,
+              confidence: result.evaluation.confidence,
+              feedback: result.evaluation.feedback,
+              improvements: result.evaluation.improvements,
+              scores: {
+                clarity: result.evaluation.clarity,
+                technical: result.evaluation.technical,
+                communication: result.evaluation.communication,
+              },
+            }
+          : item
+      )));
+    } catch (err: any) {
+      setInterviewState('listening');
+      setError(err.message || 'Failed to evaluate your answer.');
+    } finally {
+      setLoading(false);
     }
-    setPermissionState('idle');
-    setRecordingMode('video');
-    setTimeRemaining(QUESTION_TIME_LIMIT);
-  }, [mediaStream]);
+  }, [liveTranscript, sessionId, stopListening, transcript]);
 
-  const handleRetake = useCallback(() => {
-    reset();
-    if (category) void startInterview(category);
-  }, [category, reset, startInterview]);
+  const moveNext = useCallback(async () => {
+    if (!sessionId) return;
 
-  useEffect(() => {
-    if (user) interviewApi.getHistory().then(setHistory).catch(() => {});
-  }, [sessionComplete, user]);
-
-  const performanceStatus = useMemo(() => {
-    if (recordingMode === 'audio') {
-      return {
-        confidence: 'Audio-only mode is active, so visual scores are paused for this answer.',
-        eyeContact: 'Enable the camera if you want live eye-contact guidance.',
-        engagement: 'Your answer will still be reviewed based on spoken content and delivery.',
-      };
+    if (questions.filter((item) => item.answer.trim()).length >= TOTAL_QUESTIONS) {
+      setLoading(true);
+      try {
+        const result = await interviewApi.complete(sessionId);
+        setReport({
+          ...result,
+          questions: result.questions.map(normalizeQuestionItem),
+        });
+        setInterviewState('completed');
+        await loadHistory();
+      } catch (err: any) {
+        setError(err.message || 'Failed to generate the final report.');
+      } finally {
+        setLoading(false);
+      }
+      return;
     }
-    if (!liveMetrics || sampleCount === 0) {
-      return {
-        confidence: 'Live confidence starts once the camera captures a stable face sample.',
-        eyeContact: 'Stay centered and look close to the camera lens for a more accurate eye-contact score.',
-        engagement: 'Keep speaking naturally while the panel builds a live reading.',
-      };
-    }
-    return {
-      confidence:
-        (liveMetrics.confidenceScore ?? 0) >= 75 ? 'Confident delivery detected.' : (liveMetrics.confidenceScore ?? 0) >= 45 ? 'Steady delivery, with room to sound sharper.' : 'Confidence looks low right now. Slow down and make the opening clearer.',
-      eyeContact:
-        (liveMetrics.eyeContact ?? 0) >= 75 ? 'Strong eye contact with the camera.' : (liveMetrics.eyeContact ?? 0) >= 45 ? 'Eye contact is moderate. Bring your gaze closer to the lens.' : 'You are looking away often. Try to keep the lens near your natural eye line.',
-      engagement:
-        (liveMetrics.engagementLevel ?? 0) >= 70 ? 'Engagement looks strong.' : (liveMetrics.engagementLevel ?? 0) >= 45 ? 'Engagement is moderate. Add a little more energy.' : 'Engagement looks low. Vary tone and keep your answer more purposeful.',
-    };
-  }, [liveMetrics, recordingMode, sampleCount]);
 
-  const scoreCards = liveMetrics && sampleCount > 0
-    ? [
-        { label: 'Confidence', value: liveMetrics.confidenceScore ?? 0 },
-        { label: 'Eye Contact', value: liveMetrics.eyeContact ?? 0 },
-        { label: 'Engagement', value: liveMetrics.engagementLevel ?? 0 },
-      ]
-    : [];
+    setLoading(true);
+    setError(null);
+
+    try {
+      const next = await interviewApi.next(sessionId);
+      const normalizedQuestion = normalizeQuestionItem(next.question);
+      setInterviewState(next.state);
+      setQuestionIndex(next.currentQuestionIndex);
+      setCurrentQuestion(normalizedQuestion);
+      setQuestions((current) => [...current, normalizedQuestion]);
+      setTranscript('');
+      setLiveTranscript('');
+      setLastEvaluation(null);
+      await speakQuestion(normalizedQuestion.audioUrl);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load the next question.');
+    } finally {
+      setLoading(false);
+    }
+  }, [loadHistory, questions, sessionId, speakQuestion]);
+
+  const resetSession = useCallback(() => {
+    stopListening();
+    audioRef.current?.pause();
+    setSessionId(null);
+    setInterviewState('idle');
+    setCurrentQuestion(null);
+    setQuestionIndex(0);
+    setQuestions([]);
+    setTranscript('');
+    setLiveTranscript('');
+    setLastEvaluation(null);
+    setReport(null);
+    setError(null);
+  }, [stopListening]);
+
+  const latestSession = history[0];
+  const averageConfidence = getAverageConfidence(questions);
 
   if (!user) {
     return (
@@ -369,7 +387,7 @@ export default function InterviewPrep() {
         <AlertCircle className="h-12 w-12 text-muted-foreground" />
         <h2 className="text-xl font-semibold">Sign in to practice</h2>
         <p className="max-w-md text-center text-muted-foreground">
-          Log in to start AI-powered mock interviews and save your progress.
+          Log in to run AI-powered mock interviews with voice questions and live transcript feedback.
         </p>
         <Button asChild>
           <a href="/">Go to login</a>
@@ -386,415 +404,297 @@ export default function InterviewPrep() {
             'rounded-3xl border px-6 py-8 shadow-xl',
             darkTheme
               ? 'border-primary/20 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--card)/0.86)_100%)] text-foreground'
-              : 'border-primary/10 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--muted)/0.72)_100%)] text-foreground',
+              : 'border-primary/10 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--muted)/0.72)_100%)] text-foreground'
           )}
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-3">
               <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Interview Studio</p>
-              <h1 className="text-3xl font-semibold">AI Interview Preparation</h1>
+              <h1 className="text-3xl font-semibold">AI Mock Interview System</h1>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Practice realistic interviews with a more reliable recorder, audio fallback, live coaching, and face metrics that only score when they truly detect you.
+                Practice spoken interview rounds with verbal-only questions, live speech-to-text, AI voice playback, and a chart-based final report.
               </p>
               <p className="text-xs text-muted-foreground">
                 Theme: <span className="font-medium text-foreground">{themePreview.label}</span>
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
               <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
-                <p className="text-xs text-muted-foreground">Recorder</p>
-                <p className="mt-1 text-sm font-medium">{recordingMode === 'video' ? 'Video + audio' : 'Audio only'}</p>
+                <p className="text-xs text-muted-foreground">Interview state</p>
+                <p className="mt-1 text-sm font-medium">{getStateLabel(interviewState)}</p>
               </div>
               <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
-                <p className="text-xs text-muted-foreground">Face tracking</p>
-                <p className="mt-1 text-sm font-medium">{sampleCount > 0 ? `${sampleCount} samples` : 'Not locked'}</p>
+                <p className="text-xs text-muted-foreground">Questions answered</p>
+                <p className="mt-1 text-sm font-medium">{questions.filter((item) => item.answer.trim()).length} / {TOTAL_QUESTIONS}</p>
               </div>
               <div className={cn('rounded-2xl px-4 py-3', darkTheme ? 'bg-background/45' : 'bg-background/80')}>
-                <p className="text-xs text-muted-foreground">Time per answer</p>
-                <p className="mt-1 text-sm font-medium">{QUESTION_TIME_LIMIT} seconds</p>
+                <p className="text-xs text-muted-foreground">Confidence average</p>
+                <p className="mt-1 text-sm font-medium">{averageConfidence}%</p>
               </div>
             </div>
           </div>
         </div>
       </AnimatedSection>
 
-      {loadingQuestions && (
-        <div className="flex items-center gap-2 rounded-lg border border-primary/50 bg-primary/10 p-4 text-primary">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <p className="text-sm">Preparing interview questions...</p>
-        </div>
-      )}
-
-      {error && (
+      {error ? (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
-      )}
+      ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <AnimatedSection delay={0.15}>
-          <Card className={sectionCardClass}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5" />
-                Interview setup
-              </CardTitle>
-              <CardDescription>Choose your track, difficulty, and device permissions.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className={mutedPanelClass}>
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm font-medium">Permissions</span>
-                  <Badge variant={permissionState === 'granted' ? 'default' : permissionState === 'fallback-audio' ? 'secondary' : 'outline'}>
-                    {permissionState === 'granted'
-                      ? 'Camera + mic ready'
-                      : permissionState === 'fallback-audio'
-                        ? 'Audio-only'
-                        : permissionState === 'denied'
-                          ? 'Blocked'
-                          : 'Not enabled'}
+      {report ? (
+        <InterviewReport role={report.role} report={report.report} questions={report.questions} onRestart={resetSession} />
+      ) : (
+        <div className="grid gap-6 2xl:grid-cols-[360px_minmax(0,1fr)]">
+          <AnimatedSection delay={0.15}>
+            <Card className={cardClass}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <WandSparkles className="h-5 w-5" />
+                  Session setup
+                </CardTitle>
+                <CardDescription>Pick a default role or choose Other for a custom interview profile.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <label className="text-sm font-medium">Target role</label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {DEFAULT_ROLES.map((roleOption) => (
+                      <button
+                        key={roleOption}
+                        type="button"
+                        onClick={() => setSelectedRole(roleOption)}
+                        disabled={Boolean(sessionId)}
+                        className={cn(
+                          'flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition-all',
+                          selectedRole === roleOption
+                            ? 'border-primary bg-primary/10 text-foreground'
+                            : darkTheme
+                              ? 'border-border/60 bg-background/45 text-muted-foreground hover:border-primary/30'
+                              : 'border-border bg-slate-50 text-muted-foreground hover:border-primary/30',
+                          sessionId ? 'cursor-not-allowed opacity-70' : ''
+                        )}
+                      >
+                        <span>{roleOption}</span>
+                        {selectedRole === roleOption ? <Check className="h-4 w-4 text-primary" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedRole === 'Other' ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="custom-role">Custom profile name</label>
+                    <Input
+                      id="custom-role"
+                      value={customRole}
+                      onChange={(event) => setCustomRole(event.target.value)}
+                      placeholder="e.g. QA Engineer or DevOps Engineer"
+                      disabled={Boolean(sessionId)}
+                    />
+                  </div>
+                ) : null}
+
+                <div className={cn('rounded-2xl border p-4 text-sm', darkTheme ? 'border-border/60 bg-background/55' : 'border-border bg-slate-50')}>
+                  <p className="font-medium text-foreground">How it works</p>
+                  <p className="mt-2 text-muted-foreground">1. Start interview and allow camera + mic.</p>
+                  <p className="text-muted-foreground">2. Get only spoken-answer friendly questions.</p>
+                  <p className="text-muted-foreground">3. Answer verbally while speech recognition runs live.</p>
+                  <p className="text-muted-foreground">4. Download a PDF report with charts after the round.</p>
+                </div>
+
+                <Button className="w-full" onClick={() => void startInterview()} disabled={loading || Boolean(sessionId)}>
+                  {loading && !sessionId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                  Start interview
+                </Button>
+
+                {latestSession ? (
+                  <div className={cn('rounded-2xl border p-4 text-sm', darkTheme ? 'border-border/60 bg-background/55' : 'border-border bg-slate-50')}>
+                    <p className="font-medium text-foreground">Latest report</p>
+                    <p className="mt-2 text-muted-foreground">{latestSession.role}</p>
+                    <p className="text-muted-foreground">Overall score: {latestSession.overallScore}</p>
+                    <p className="text-muted-foreground">Confidence: {latestSession.report?.confidenceScore ?? 0}</p>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          </AnimatedSection>
+
+          <div className="space-y-6">
+            <Card className={cardClass}>
+              <CardHeader>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <CardTitle>Current question</CardTitle>
+                    <CardDescription>
+                      {sessionId ? `Question ${questionIndex + 1} of ${TOTAL_QUESTIONS}` : 'Start an interview to load the first spoken-answer question.'}
+                    </CardDescription>
+                  </div>
+                  <Badge variant={isListening ? 'destructive' : 'secondary'} className="w-fit">
+                    {isListening ? 'Listening live' : getStateLabel(interviewState)}
                   </Badge>
                 </div>
-                <Button variant="outline" className="w-full" onClick={requestMedia}>
-                  <Mic className="mr-2 h-4 w-4" />
-                  {permissionState === 'idle' ? 'Enable camera & mic' : 'Refresh permissions'}
-                </Button>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  If the camera is unavailable, practice continues with audio-only recording instead of failing.
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">Difficulty</label>
-                <div className="flex flex-wrap gap-2">
-                  {DIFFICULTIES.map((item) => (
-                    <Button
-                      key={item.value}
-                      size="sm"
-                      variant={difficulty === item.value ? 'default' : 'outline'}
-                      onClick={() => setDifficulty(item.value)}
-                      disabled={!!sessionId && !sessionComplete}
-                    >
-                      {item.label}
-                    </Button>
-                  ))}
+              </CardHeader>
+              <CardContent>
+                <div className={cn('rounded-2xl border p-5 text-lg leading-relaxed', darkTheme ? 'border-primary/10 bg-background/50' : 'border-border bg-slate-50')}>
+                  {currentQuestion?.question || 'Your AI interviewer question will appear here.'}
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              <div className="space-y-2">
-                {CATEGORIES.map((item) => (
-                  <motion.div
-                    key={item.name}
-                    whileHover={{ scale: sessionId && !sessionComplete ? 1 : 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`cursor-pointer rounded-xl border p-3 transition-all ${
-                      category === item.name ? 'border-primary bg-primary/8' : darkTheme ? 'hover:border-primary/30 hover:bg-background/45' : 'hover:border-primary/40'
-                    } ${sessionId && !sessionComplete ? 'cursor-not-allowed opacity-70' : ''}`}
-                    onClick={() => {
-                      if (!sessionId && !loadingQuestions) void startInterview(item.name);
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{item.label}</span>
-                      {category === item.name ? <Badge variant="secondary">Selected</Badge> : null}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-                <div className="space-y-3 border-t pt-4">
-                  <div className={mutedPanelClass}>
-                    <h4 className="mb-2 flex items-center gap-2 font-medium">
-                      <ShieldCheck className="h-4 w-4" />
-                      Session guidance
-                    </h4>
-                    <div className="space-y-2 text-xs text-muted-foreground">
-                      <p>Keep your answer structured and start with the main point first.</p>
-                      <p>Audio is always prioritized for review, and video signals are captured in the background when available.</p>
-                      <p>Your interview should continue normally even if camera analysis is not available for part of the recording.</p>
-                    </div>
-                  </div>
-
-                <div>
-                  <h4 className="mb-2 flex items-center gap-2 font-medium">
-                    <History className="h-4 w-4" />
-                    Latest performance
-                  </h4>
-                  {!latestSession ? (
-                    <p className="text-xs text-muted-foreground">Your latest completed interview report will appear here after you finish one session.</p>
-                  ) : (
-                    <div className={mutedPanelClass}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{latestSession.category}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{latestSession.difficulty} interview</p>
-                        </div>
-                        <Badge variant="outline">{latestSession.overallScore ?? '-'} / 100</Badge>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className={cn('rounded-xl border px-3 py-2', darkTheme ? 'bg-background/60' : 'bg-white')}>
-                          <p className="text-muted-foreground">Confidence</p>
-                          <p className="mt-1 font-semibold text-foreground">{latestSession.confidenceScore ?? '-'} / 100</p>
-                        </div>
-                        <div className={cn('rounded-xl border px-3 py-2', darkTheme ? 'bg-background/60' : 'bg-white')}>
-                          <p className="text-muted-foreground">Questions</p>
-                          <p className="mt-1 font-semibold text-foreground">{latestSession.questions?.length ?? 0}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </AnimatedSection>
-
-        <div className="space-y-6">
-          <AnimatePresence mode="wait">
-            {!sessionId ? (
-              <motion.div
-                key="start"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className={cn(
-                  'rounded-3xl border p-10 text-center shadow-sm',
-                  darkTheme ? 'border-primary/15 bg-gradient-to-br from-card to-background/70' : 'border-border bg-gradient-to-br from-slate-50 to-white',
-                )}
-              >
-                <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent">
-                  <Play className="ml-1 h-12 w-12 text-primary-foreground" />
-                </div>
-                <h3 className="mb-2 text-xl font-semibold">Ready to start a mock interview?</h3>
-                <p className="mx-auto mb-6 max-w-2xl text-muted-foreground">
-                  Select a category on the left to generate five AI interview questions. Each answer is reviewed using your recorded response, transcript, and live video metrics when available.
-                </p>
-                <div className="grid gap-3 md:grid-cols-3">
-                    <div className={cn('rounded-2xl border p-4 text-left', darkTheme ? 'bg-background/60' : 'bg-white')}>
-                    <p className="font-medium">Reliable multi-question flow</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Each question resets cleanly so you can record, submit, and continue without recorder errors.</p>
-                  </div>
-                  <div className={cn('rounded-2xl border p-4 text-left', darkTheme ? 'bg-background/60' : 'bg-white')}>
-                    <p className="font-medium">Real response analysis</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Feedback is based on your recorded answer and video metrics, with fallback data only when a service actually fails.</p>
-                  </div>
-                  <div className={cn('rounded-2xl border p-4 text-left', darkTheme ? 'bg-background/60' : 'bg-white')}>
-                    <p className="font-medium">Saved latest performance</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Your latest completed interview remains visible as your current benchmark.</p>
-                  </div>
-                </div>
-              </motion.div>
-            ) : sessionComplete && result ? (
-              <motion.div key="report" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <InterviewReport
-                  overallScore={result.overallScore}
-                  confidenceScore={result.confidenceScore ?? result.overallScore}
-                  scores={result.scores ?? {}}
-                  strengths={result.responses?.flatMap((response: any) => response.evaluation?.strengths ?? []) ?? []}
-                  improvements={result.responses?.flatMap((response: any) => response.evaluation?.improvements ?? []) ?? []}
-                  feedback={result.responses?.map((response: any) => response.evaluation?.feedback).filter(Boolean).join(' ') || 'Great effort!'}
-                  category={result.category}
-                  onRetake={handleRetake}
-                  onNewInterview={reset}
-                />
-              </motion.div>
-            ) : currentQuestion ? (
-              <motion.div key={currentIndex} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <Badge variant="secondary">Question {currentIndex + 1} of {questions.length}</Badge>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className={cn('rounded-2xl border p-3', darkTheme ? 'bg-background/60' : 'bg-white')}>
-                      <p className="text-xs text-muted-foreground">Timer</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <Clock className={`h-4 w-4 ${timeRemaining < 20 ? 'text-destructive' : 'text-muted-foreground'}`} />
-                        <span className={timeRemaining < 20 ? 'font-semibold text-destructive' : 'font-semibold text-foreground'}>
-                          {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
-                        </span>
-                      </div>
-                    </div>
-                    <div className={cn('rounded-2xl border p-3', darkTheme ? 'bg-background/60' : 'bg-white')}>
-                      <p className="text-xs text-muted-foreground">Mode</p>
-                      <p className="mt-1 font-semibold text-foreground">{recordingMode === 'video' ? 'Video + audio' : 'Audio only'}</p>
-                    </div>
-                    <div className={cn('rounded-2xl border p-3', darkTheme ? 'bg-background/60' : 'bg-white')}>
-                      <p className="text-xs text-muted-foreground">Face samples</p>
-                      <p className="mt-1 font-semibold text-foreground">{sampleCount}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <Card className={cn(sectionCardClass, 'bg-muted/30')}>
-                  <CardContent className="p-6">
-                    <p className="text-lg leading-relaxed">{currentQuestion.text}</p>
-                  </CardContent>
-                </Card>
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_360px]">
-                  <div className="space-y-4">
+            <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.2fr)_360px]">
+              <Card className={cardClass}>
+                <CardHeader>
+                  <CardTitle>Live interview room</CardTitle>
+                  <CardDescription>Camera on the left, AI interviewer on the right, transcript below.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 xl:grid-cols-2">
                     <div className="relative overflow-hidden rounded-2xl border bg-slate-950">
-                      <video ref={videoRef} autoPlay muted playsInline className="h-[360px] w-full object-cover" />
-                      {!mediaStream && (
+                      <video ref={videoRef} autoPlay muted playsInline className="h-[260px] w-full object-cover sm:h-[320px]" />
+                      {!mediaReady ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-muted">
                           <VideoOff className="h-12 w-12 text-muted-foreground" />
                         </div>
-                      )}
-                      {recordingMode === 'audio' && mediaStream && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-white">
-                          <div className="text-center">
-                            <Mic className="mx-auto h-12 w-12 opacity-90" />
-                            <p className="mt-3 text-sm text-white/70">Audio-only practice mode</p>
-                          </div>
-                        </div>
-                      )}
-                      {isRecording && <div className="absolute left-4 top-4 rounded-full bg-red-500 px-3 py-1 text-xs font-medium text-white">REC</div>}
-                      {isRecording && (
-                        <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/65 px-3 py-2 text-xs text-white">
-                          {faceLoading && recordingMode === 'video'
-                            ? 'Camera and microphone are active.'
-                            : recordingMode === 'audio'
-                              ? 'Audio-only recording is active.'
-                              : sampleCount > 0
-                                ? 'Recording answer with video and audio analysis.'
-                                : 'Recording answer. Keep speaking clearly and stay centered in frame.'}
-                        </div>
-                      )}
+                      ) : null}
+                      <div className="absolute left-4 top-4 rounded-full bg-black/70 px-3 py-1 text-xs text-white">
+                        <Camera className="mr-1 inline h-3.5 w-3.5" />
+                        {mediaReady ? 'Camera live' : 'Camera offline'}
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap justify-center gap-4">
-                      {!showEvaluation && !isRecording && !recordedBlob && (
-                        <Button onClick={startRecording}>
-                          <Camera className="mr-2 h-4 w-4" />
-                          Start recording
-                        </Button>
-                      )}
-                      {!showEvaluation && isRecording && (
-                        <Button variant="destructive" onClick={stopRecording}>
-                          <Square className="mr-2 h-4 w-4" />
-                          Stop
-                        </Button>
-                      )}
-                      {!showEvaluation && recordedBlob && !uploading && (
-                        <Button onClick={submitResponse}>
-                          <CheckCircle2 className="mr-2 h-4 w-4" />
-                          Submit answer
-                        </Button>
-                      )}
-                      {uploading && (
-                        <Button disabled>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Analyzing...
-                        </Button>
-                      )}
+                    <div className={cn('relative overflow-hidden rounded-2xl border p-5', darkTheme ? 'border-primary/10 bg-background/50' : 'border-border bg-slate-50')}>
+                      <div className="mb-4 flex items-center gap-3">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/15 text-primary">
+                          <UserCircle2 className="h-8 w-8" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground">AI Interviewer</p>
+                          <p className="text-sm text-muted-foreground">Google TTS voice with Groq-generated verbal questions</p>
+                        </div>
+                      </div>
+                      <div className="mb-4 flex h-20 items-end gap-2">
+                        {[20, 42, 60, 36, 70, 48, 58, 28, 62, 34].map((height, index) => (
+                          <div
+                            key={height + index}
+                            className={cn('w-full rounded-full bg-primary/70 transition-all', interviewState === 'asking' ? 'animate-pulse' : 'opacity-50')}
+                            style={{ height: `${height}%` }}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {currentQuestion?.audioUrl
+                          ? 'Question audio is ready and optimized for a short spoken round.'
+                          : 'Voice audio is unavailable, but the text question is ready.'}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <Card className={sectionCardClass}>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                          <Sparkles className="h-4 w-4" />
-                          Live performance panel
-                        </CardTitle>
-                        <CardDescription>Live visual coaching updates quietly while you answer.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {scoreCards.length > 0 ? (
-                          scoreCards.map((item) => (
+                  <div className={cn('rounded-2xl border p-4', darkTheme ? 'border-border/60 bg-background/55' : 'border-border bg-slate-50')}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-foreground">Live transcript</p>
+                      <span className={cn('text-xs', isListening ? 'text-red-500' : 'text-muted-foreground')}>
+                        {isListening ? 'REC live' : 'Standby'}
+                      </span>
+                    </div>
+                    <p className="mt-3 min-h-24 text-sm leading-6 text-muted-foreground">
+                      {transcript || liveTranscript || 'Your spoken answer will appear here in real time.'}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <Button className="w-full" onClick={startListening} disabled={!sessionId || isListening || loading || interviewState === 'completed'}>
+                      <Mic className="mr-2 h-4 w-4" />
+                      Start answer
+                    </Button>
+                    <Button className="w-full" variant="outline" onClick={stopListening} disabled={!isListening}>
+                      <MicOff className="mr-2 h-4 w-4" />
+                      Stop capture
+                    </Button>
+                    <Button className="w-full" onClick={() => void submitAnswer()} disabled={!sessionId || loading || (!transcript.trim() && !liveTranscript.trim())}>
+                      {loading && interviewState === 'processing' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
+                      Submit answer
+                    </Button>
+                    <Button className="w-full" variant="secondary" onClick={() => void moveNext()} disabled={!sessionId || loading || interviewState !== 'feedback'}>
+                      {questions.filter((item) => item.answer.trim()).length >= TOTAL_QUESTIONS ? 'Finish interview' : 'Next'}
+                    </Button>
+                    <Button className="w-full" variant="ghost" onClick={resetSession} disabled={loading}>
+                      Reset
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-6">
+                <Card className={cardClass}>
+                  <CardHeader>
+                    <CardTitle>Confidence score</CardTitle>
+                    <CardDescription>Updated after each evaluated answer.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-center">
+                      <div className="relative flex h-36 w-36 items-center justify-center rounded-full border-8 border-primary/20">
+                        <div
+                          className="absolute inset-0 rounded-full"
+                          style={{
+                            background: `conic-gradient(hsl(var(--primary)) ${lastEvaluation?.confidence ?? averageConfidence}% , transparent 0)`,
+                            mask: 'radial-gradient(circle at center, transparent 58%, black 59%)',
+                            WebkitMask: 'radial-gradient(circle at center, transparent 58%, black 59%)',
+                          }}
+                        />
+                        <div className="relative text-center">
+                          <p className="text-3xl font-semibold text-foreground">{lastEvaluation?.confidence ?? averageConfidence}%</p>
+                          <p className="text-xs text-muted-foreground">confidence</p>
+                        </div>
+                      </div>
+                    </div>
+                    <Progress value={lastEvaluation?.confidence ?? averageConfidence} className="h-2" />
+                  </CardContent>
+                </Card>
+
+                <Card className={cardClass}>
+                  <CardHeader>
+                    <CardTitle>AI feedback</CardTitle>
+                    <CardDescription>Clearer summary for the latest spoken answer.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm text-muted-foreground">
+                    {lastEvaluation ? (
+                      <>
+                        <div className="space-y-3">
+                          {[
+                            { label: 'Clarity', value: lastEvaluation.clarity },
+                            { label: 'Technical', value: lastEvaluation.technical },
+                            { label: 'Communication', value: lastEvaluation.communication },
+                          ].map((item) => (
                             <div key={item.label} className="space-y-2">
-                              <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center justify-between">
                                 <span>{item.label}</span>
-                                <span className="font-medium">{item.value}%</span>
+                                <span className="font-medium text-foreground">{item.value}%</span>
                               </div>
-                              <div className="h-2 rounded-full bg-muted">
-                                <div className="h-2 rounded-full bg-primary" style={{ width: `${item.value}%` }} />
-                              </div>
+                              <Progress value={item.value} className="h-2" />
                             </div>
-                          ))
-                        ) : (
-                          <div className={cn(mutedPanelClass, 'text-sm text-muted-foreground')}>
-                            {recordingMode === 'audio'
-                              ? 'Audio-only mode is active. Live visual scoring is paused for this answer.'
-                              : 'Start speaking and keep your face visible to build live coaching scores.'}
+                          ))}
+                        </div>
+                        <div className={cn('rounded-2xl border p-4', darkTheme ? 'border-border/60 bg-background/55' : 'border-border bg-slate-50')}>
+                          <p className="leading-6">{lastEvaluation.feedback}</p>
+                        </div>
+                        {lastEvaluation.improvements.map((item, index) => (
+                          <div key={`${item}-${index}`} className={cn('rounded-xl border px-3 py-2', darkTheme ? 'border-border/60 bg-background/55' : 'border-border bg-slate-50')}>
+                            {item}
                           </div>
-                        )}
-                        <div className={cn(mutedPanelClass, 'text-sm text-muted-foreground')}>
-                          <p>{performanceStatus.confidence}</p>
-                          <p className="mt-2">{performanceStatus.eyeContact}</p>
-                          <p className="mt-2">{performanceStatus.engagement}</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className={sectionCardClass}>
-                      <CardHeader>
-                        <CardTitle className="text-base">Answer checklist</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3 text-sm text-muted-foreground">
-                        <p>1. Start with a direct answer before giving details.</p>
-                        <p>2. Use one concrete example, result, or project.</p>
-                        <p>3. Keep pacing steady and avoid rushing the first 20 seconds.</p>
-                        <p>4. In video mode, keep your eyes close to the camera lens.</p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-
-                {showEvaluation && lastEvaluation && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5" />
-                        Instant feedback
-                      </CardTitle>
-                      <CardDescription>Score: {lastEvaluation.score}/100</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {lastTranscript ? (
-                        <div className={cn(mutedPanelClass, 'text-sm text-muted-foreground')}>
-                          <strong className="text-foreground">Transcript preview:</strong> {lastTranscript.slice(0, 320)}
-                          {lastTranscript.length > 320 ? '...' : ''}
-                        </div>
-                      ) : null}
-                      {evaluationMeta && !evaluationMeta.transcriptDetected ? (
-                        <div className="rounded-2xl border border-amber-400/60 bg-amber-50 p-4 text-sm text-amber-800">
-                          No clear spoken answer was detected in this recording, so the review focused on capture quality instead of answer quality. Retrying with clearer audio will give a more accurate review.
-                        </div>
-                      ) : null}
-                      {evaluationMeta?.usedFallbackEvaluation ? (
-                        <div className="rounded-2xl border border-amber-400/60 bg-amber-50 p-4 text-sm text-amber-800">
-                          The AI review service was temporarily unavailable, so a fallback evaluation was used for this response.
-                        </div>
-                      ) : null}
-                      <p className="text-sm">{lastEvaluation.feedback}</p>
-                      {lastEvaluation.strengths?.length ? (
-                        <ul className="list-inside list-disc text-sm">
-                          {lastEvaluation.strengths.map((item, index) => <li key={index}>{item}</li>)}
-                        </ul>
-                      ) : null}
-                      {lastEvaluation.improvements?.length ? (
-                        <ul className="list-inside list-disc text-sm text-muted-foreground">
-                          {lastEvaluation.improvements.map((item, index) => <li key={index}>{item}</li>)}
-                        </ul>
-                      ) : null}
-                      <Button onClick={isLastQuestion ? () => setSessionComplete(true) : nextQuestion} className="w-full">
-                        {isLastQuestion ? 'See full report' : 'Next question'}
-                        <ChevronRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-
-                <div className="flex justify-between">
-                  <Button variant="outline" onClick={reset}>
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Exit
-                  </Button>
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+                        ))}
+                      </>
+                    ) : (
+                      <p>Your confidence, clarity, technical score, and communication feedback will appear here after you submit an answer.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

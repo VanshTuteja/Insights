@@ -456,7 +456,7 @@ const EmployerDashboard: React.FC = () => {
 
       {/* Stats */}
       <AnimatedSection delay={0.2}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           {employerStats.filter((stat) => stat.label !== 'Profile Views').map((stat, index) => (
             <motion.div
               key={stat.label}
@@ -484,12 +484,12 @@ const EmployerDashboard: React.FC = () => {
         </div>
       </AnimatedSection>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Job Management */}
         <div className="lg:col-span-2 space-y-6">
           <AnimatedSection delay={0.3}>
             <Tabs defaultValue="active" className="w-full">
-              <TabsList>
+              <TabsList className="grid h-auto w-full grid-cols-1 gap-2 sm:grid-cols-3">
                 <TabsTrigger value="active">Job Posts</TabsTrigger>
                 <TabsTrigger value="create">New Post</TabsTrigger>
                 <TabsTrigger value="analytics">Analytics</TabsTrigger>
@@ -511,10 +511,10 @@ const EmployerDashboard: React.FC = () => {
                           transition={{ delay: 0.1 * index }}
                           className={cn('p-4 border rounded-lg hover:shadow-md transition-shadow', darkTheme ? 'border-border/70 bg-background/45' : 'border-border bg-background')}
                         >
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-2">
+                          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="min-w-0 space-y-2">
                               <h3 className="font-semibold">{job.title}</h3>
-                              <div className="flex space-x-4 text-sm text-muted-foreground">
+                              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                                 <span className="flex items-center space-x-1">
                                   <Users className="h-4 w-4" />
                                   <span>{job.applications} applications</span>
@@ -529,8 +529,8 @@ const EmployerDashboard: React.FC = () => {
                                 </span>
                               </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <Badge variant={job.status === 'Active' ? 'default' : 'secondary'}>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                              <Badge variant={job.status === 'Active' ? 'default' : 'secondary'} className="w-fit">
                                 {job.status}
                               </Badge>
                               <Button
@@ -611,7 +611,7 @@ const EmployerDashboard: React.FC = () => {
                     className={cn('p-4 border rounded-lg cursor-pointer hover:shadow-md transition-shadow', darkTheme ? 'border-border/70 bg-background/45' : 'border-border bg-background')}
                   >
                     <div className="space-y-2">
-                      <div className="flex justify-between items-start">
+                      <div className="flex items-start justify-between gap-3">
                         <h4 className="font-semibold">{application.candidateName}</h4>
                         {/* <Badge variant="outline" className="text-green-600 border-green-600">
                           {application.match}% match
@@ -619,7 +619,7 @@ const EmployerDashboard: React.FC = () => {
                       </div>
                       <p className="text-sm text-muted-foreground">{application.position}</p>
                       <p className="text-xs text-muted-foreground">Applied {application.applied}</p>
-                      <div className="flex space-x-2 pt-2">
+                      <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:gap-2">
                         <Button 
                           size="sm" 
                           variant="outline"
@@ -665,7 +665,7 @@ const EmployerDashboard: React.FC = () => {
       />
 
       <Dialog open={jobApplicantsOpen} onOpenChange={setJobApplicantsOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Applicants for {selectedApplicantsJob?.title}</DialogTitle>
             <DialogDescription>
@@ -681,7 +681,7 @@ const EmployerDashboard: React.FC = () => {
               <p className="text-sm text-muted-foreground">No applicants yet for this job.</p>
             ) : (
               jobApplicants.map((application) => (
-                <div key={application.id} className="rounded-lg border p-4 space-y-3">
+                <div key={application.id} className="space-y-3 rounded-lg border p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h4 className="font-semibold">{application.candidateName}</h4>
@@ -695,7 +695,7 @@ const EmployerDashboard: React.FC = () => {
                       <Badge key={skill} variant="secondary">{skill}</Badge>
                     ))}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Button size="sm" variant="outline" onClick={() => handleViewCandidate(application)}>
                       View Details
                     </Button>
@@ -811,7 +811,7 @@ const EmployerDashboard: React.FC = () => {
               disabled={scheduleLoading}
             />
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
             <Button variant="outline" onClick={() => setScheduleOpen(false)} disabled={scheduleLoading}>
               Cancel
             </Button>

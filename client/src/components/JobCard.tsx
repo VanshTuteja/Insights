@@ -32,7 +32,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
     <motion.div
       whileHover={{ y: -4, scale: 1.02 }}
       transition={{ duration: 0.2 }}
-      className="h-[320px] w-full"
+      className="h-full min-h-[320px] w-full"
     >
       <Card className="h-full hover:shadow-lg transition-shadow duration-300 bg-gradient-to-br from-card to-card/50 border-0 shadow-md flex flex-col">
         <CardHeader className="pb-3">
@@ -100,10 +100,10 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
             )}
           </div>
 
-          <div className="flex space-x-2 pt-2 mt-auto">
+          <div className="mt-auto flex flex-col gap-2 pt-2 sm:flex-row sm:gap-2">
             <Button 
               onClick={() => onApply?.(job.id)}
-              className="flex-1 bg-primary hover:opacity-90 transition-opacity"
+              className="flex-1 bg-primary transition-opacity hover:opacity-90"
               size="sm"
               disabled={isApplying}
             >
@@ -120,7 +120,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
               variant="outline" 
               size="sm"
               onClick={() => onViewDetails?.(job)}
-              className="whitespace-nowrap"
+              className="whitespace-nowrap sm:w-auto"
             >
               Details
             </Button>

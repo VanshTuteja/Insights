@@ -2,27 +2,88 @@ import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-export type InterviewCategory =
-  | 'Technical'
-  | 'Behavioral'
-  | 'Leadership'
-  | 'Problem Solving'
-  | 'System Design'
-  | 'HR'
-  | 'Combined';
+export type InterviewState = 'idle' | 'asking' | 'listening' | 'processing' | 'feedback' | 'completed';
 
-export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced';
-
-export interface QuestionItem {
-  questionId: string;
-  text: string;
+export interface InterviewQuestion {
+  _id?: string;
+  question: string;
+  answer: string;
+  confidence: number;
+  feedback: string;
+  improvements: string[];
+  scores: {
+    clarity: number;
+    technical: number;
+    communication: number;
+  };
+  audioUrl?: string;
+  askedAt?: string;
+  answeredAt?: string;
 }
 
-export interface Evaluation {
-  score: number;
-  strengths: string[];
-  improvements: string[];
+export interface AnswerEvaluation {
+  confidence: number;
+  clarity: number;
+  technical: number;
+  communication: number;
   feedback: string;
+  improvements: string[];
+}
+
+export interface InterviewReport {
+  overallScore: number;
+  confidenceScore: number;
+  strengths: string[];
+  weaknesses: string[];
+  improvements: string[];
+  summary: string;
+}
+
+export interface InterviewHistoryItem {
+  _id: string;
+  role: string;
+  questions: InterviewQuestion[];
+  currentQuestionIndex: number;
+  status: 'in_progress' | 'completed';
+  state: InterviewState;
+  overallScore: number;
+  report?: InterviewReport;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StartInterviewResponse {
+  sessionId: string;
+  role: string;
+  state: InterviewState;
+  totalQuestions: number;
+  currentQuestionIndex: number;
+  question: InterviewQuestion;
+}
+
+export interface AnswerResponse {
+  sessionId: string;
+  state: InterviewState;
+  questionIndex: number;
+  evaluation: AnswerEvaluation;
+  hasMoreQuestions: boolean;
+}
+
+export interface NextQuestionResponse {
+  sessionId: string;
+  state: InterviewState;
+  currentQuestionIndex: number;
+  totalQuestions: number;
+  question: InterviewQuestion;
+}
+
+export interface CompleteInterviewResponse {
+  sessionId: string;
+  role: string;
+  overallScore: number;
+  report: InterviewReport;
+  questions: InterviewQuestion[];
+  createdAt: string;
 }
 
 export interface ConfidenceMetrics {
@@ -35,126 +96,63 @@ export interface ConfidenceMetrics {
   engagementLevel?: number;
 }
 
-export interface StartInterviewResponse {
-  sessionId: string;
-  category: InterviewCategory;
-  difficulty: DifficultyLevel;
-  totalQuestions: number;
-  question: QuestionItem;
-  questionIndex: number;
-}
-
-export interface UploadResponsePayload {
-  sessionId: string;
-  questionIndex: number;
-  confidenceMetrics?: ConfidenceMetrics;
-}
-
-export interface UploadResponseResult {
-  transcript: string;
-  evaluation: Evaluation;
-  confidenceMetrics?: ConfidenceMetrics;
-  nextQuestionIndex: number | null;
-  isComplete: boolean;
-  sessionId: string;
-  usedFallbackEvaluation?: boolean;
-  transcriptDetected?: boolean;
-  transcriptSource?: 'uploaded-media' | 'provided-text' | 'none';
-}
-
-function fileNameFromBlob(blob: Blob) {
-  const type = blob.type.toLowerCase();
-  if (type.includes('mp4')) return 'recording.mp4';
-  if (type.includes('wav')) return 'recording.wav';
-  if (type.includes('ogg')) return 'recording.ogg';
-  if (type.includes('webm')) return 'recording.webm';
-  return 'recording.webm';
-}
-
 export interface SessionScores {
-  relevance: number;
-  communication: number;
-  technicalDepth: number;
   confidence: number;
-  structure: number;
   clarity: number;
-}
-
-export interface ResponseRecord {
-  questionId: string;
-  questionText: string;
-  transcript: string;
-  evaluation: Evaluation;
-  confidenceMetrics?: ConfidenceMetrics;
-}
-
-export interface InterviewSessionResult {
-  _id: string;
-  userId: string;
-  category: InterviewCategory;
-  difficulty: DifficultyLevel;
-  questions: Array<{ questionId: string; text: string }>;
-  responses: ResponseRecord[];
-  scores: SessionScores;
-  overallScore: number;
-  confidenceScore: number;
-  status: 'in_progress' | 'completed';
-  createdAt: string;
-  updatedAt: string;
+  technical: number;
+  communication: number;
 }
 
 export const interviewApi = {
-  start: async (category: InterviewCategory, difficulty: DifficultyLevel = 'intermediate'): Promise<StartInterviewResponse> => {
+  start: async (role: string): Promise<StartInterviewResponse> => {
     const { data } = await axios.post<{ success: boolean; data: StartInterviewResponse }>(
       `${API_BASE}/interview/start`,
-      { category, difficulty }
+      { role }
     );
     if (!data.success) throw new Error('Failed to start interview');
     return data.data;
   },
 
-  getQuestion: async (sessionId: string, questionIndex: number) => {
-    const { data } = await axios.get<{ success: boolean; data: { question: QuestionItem; questionIndex: number; totalQuestions: number } }>(
-      `${API_BASE}/interview/question`,
-      { params: { sessionId, questionIndex } }
+  answer: async (sessionId: string, transcript: string): Promise<AnswerResponse> => {
+    const { data } = await axios.post<{ success: boolean; data: AnswerResponse }>(
+      `${API_BASE}/interview/answer`,
+      { sessionId, transcript }
     );
-    if (!data.success) throw new Error('Failed to get question');
+    if (!data.success) throw new Error('Failed to evaluate answer');
     return data.data;
   },
 
-  uploadResponse: async (
-    sessionId: string,
-    questionIndex: number,
-    audioBlob: Blob,
-    confidenceMetrics?: ConfidenceMetrics
-  ): Promise<UploadResponseResult> => {
-    const form = new FormData();
-    form.append('audio', audioBlob, fileNameFromBlob(audioBlob));
-    form.append('sessionId', sessionId);
-    form.append('questionIndex', String(questionIndex));
-    if (confidenceMetrics) form.append('confidenceMetrics', JSON.stringify(confidenceMetrics));
-    const { data } = await axios.post<{ success: boolean; data: UploadResponseResult }>(
-      `${API_BASE}/interview/upload-response`,
-      form,
-      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }
+  next: async (sessionId: string): Promise<NextQuestionResponse> => {
+    const { data } = await axios.get<{ success: boolean; data: NextQuestionResponse }>(
+      `${API_BASE}/interview/next`,
+      { params: { sessionId } }
     );
-    if (!data.success) throw new Error('Failed to upload response');
+    if (!data.success) throw new Error('Failed to load next question');
     return data.data;
   },
 
-  getResult: async (sessionId: string): Promise<InterviewSessionResult> => {
-    const { data } = await axios.get<{ success: boolean; data: InterviewSessionResult }>(
+  complete: async (sessionId: string): Promise<CompleteInterviewResponse> => {
+    const { data } = await axios.post<{ success: boolean; data: CompleteInterviewResponse }>(
+      `${API_BASE}/interview/complete`,
+      { sessionId }
+    );
+    if (!data.success) throw new Error('Failed to complete interview');
+    return data.data;
+  },
+
+  getResult: async (sessionId: string): Promise<InterviewHistoryItem> => {
+    const { data } = await axios.get<{ success: boolean; data: InterviewHistoryItem }>(
       `${API_BASE}/interview/result/${sessionId}`
     );
-    if (!data.success) throw new Error('Failed to get result');
+    if (!data.success) throw new Error('Failed to load interview result');
     return data.data;
   },
 
-  getHistory: async (): Promise<InterviewSessionResult[]> => {
-    const { data } = await axios.get<{ success: boolean; data: InterviewSessionResult[] }>(
+  getHistory: async (): Promise<InterviewHistoryItem[]> => {
+    const { data } = await axios.get<{ success: boolean; data: InterviewHistoryItem[] }>(
       `${API_BASE}/interview/history`
     );
-    if (!data.success) throw new Error('Failed to get history');
+    if (!data.success) throw new Error('Failed to load interview history');
     return data.data;
   },
 };

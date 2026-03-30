@@ -78,7 +78,7 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
 
   return (
     <div className={cn(
-      "relative flex flex-col h-full bg-background border-r transition-all duration-300",
+      "relative flex h-full flex-col border-r bg-background transition-all duration-300",
       isCollapsed ? "w-16" : "w-64",
       className
     )}>
@@ -117,7 +117,7 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
       </div>
 
       {/* Scrollable Navigation */}
-      <ScrollArea className="flex-1 px-3">
+      <ScrollArea className="flex-1 px-2 sm:px-3">
         <div className="space-y-6 py-4">
           {/* Main Navigation */}
           <div className="space-y-2">
@@ -144,7 +144,7 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
                     <Button
                       variant={location.pathname === path ? "secondary" : "ghost"}
                       className={cn(
-                        "w-full justify-start relative group",
+                        "relative w-full justify-start overflow-hidden text-left group",
                         isCollapsed ? "px-2" : "px-3",
                         location.pathname === path && "bg-primary/10 text-primary border-r-2 border-primary"
                       )}
@@ -220,7 +220,7 @@ const Sidebar: React.FC<SidebarProps> = ({ className, isCollapsed, onToggle }) =
                         <Button
                           variant={location.pathname === path ? "secondary" : "ghost"}
                           className={cn(
-                            "w-full justify-start relative group",
+                            "relative w-full justify-start overflow-hidden text-left group",
                             isCollapsed ? "px-2" : "px-3",
                             location.pathname === path && "bg-primary/10 text-primary border-r-2 border-primary"
                           )}

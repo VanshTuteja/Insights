@@ -270,7 +270,7 @@ const Jobs: React.FC = () => {
               </Select>
             </div>
             
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-2">
                 {popularSearches.map((search) => (
                   <motion.div
@@ -288,7 +288,7 @@ const Jobs: React.FC = () => {
                   </motion.div>
                 ))}
               </div>
-              <Button onClick={handleSearch} disabled={loading} className="bg-gradient-to-r from-primary to-secondary">
+              <Button onClick={handleSearch} disabled={loading} className="w-full bg-gradient-to-r from-primary to-secondary lg:w-auto">
                 {loading ? <LoadingSpinner size="sm" /> : 'Search'}
               </Button>
             </div>
@@ -299,9 +299,9 @@ const Jobs: React.FC = () => {
       {/* Job Results */}
       <AnimatedSection delay={0.2}>
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-2xl font-bold">Available Positions</h2>
-            <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <Briefcase className="h-4 w-4" />
               <span>{pagination.total || mappedJobs.length} jobs found</span>
             </div>

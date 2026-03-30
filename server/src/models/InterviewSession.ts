@@ -1,100 +1,72 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { InterviewCategory, DifficultyLevel } from './Question';
+import mongoose, { Document, Schema } from 'mongoose';
 
-export interface IEvaluation {
-  score: number;
-  strengths: string[];
-  improvements: string[];
-  feedback: string;
-}
+export type InterviewMode = 'idle' | 'asking' | 'listening' | 'processing' | 'feedback' | 'completed';
 
-export interface IConfidenceMetrics {
-  eyeContact: number;
-  smiling: number;
-  headMovement: number;
-  attentionLevel: number;
-  confidenceScore: number;
-  speechPace?: number;
-  engagementLevel?: number;
-}
-
-export interface IResponseRecord {
-  questionId: mongoose.Types.ObjectId;
-  questionText: string;
-  transcript: string;
-  evaluation: IEvaluation;
-  confidenceMetrics?: IConfidenceMetrics;
-  videoUrl?: string;
-  audioUrl?: string;
-}
-
-export interface ISessionScores {
-  relevance: number;
-  communication: number;
-  technicalDepth: number;
+export interface IInterviewQuestion {
+  question: string;
+  answer: string;
   confidence: number;
-  structure: number;
-  clarity: number;
+  feedback: string;
+  improvements: string[];
+  scores: {
+    clarity: number;
+    technical: number;
+    communication: number;
+  };
+  audioUrl?: string;
+  askedAt?: Date;
+  answeredAt?: Date;
+}
+
+export interface IInterviewReport {
+  overallScore: number;
+  confidenceScore: number;
+  strengths: string[];
+  weaknesses: string[];
+  improvements: string[];
+  summary: string;
 }
 
 export interface IInterviewSession extends Document {
   userId: mongoose.Types.ObjectId;
-  category: InterviewCategory;
-  difficulty: DifficultyLevel;
-  questions: Array<{ questionId: mongoose.Types.ObjectId; text: string }>;
-  responses: IResponseRecord[];
-  scores: ISessionScores;
-  overallScore: number;
-  confidenceScore: number;
+  role: string;
+  questions: IInterviewQuestion[];
+  currentQuestionIndex: number;
   status: 'in_progress' | 'completed';
+  state: InterviewMode;
+  overallScore: number;
+  report?: IInterviewReport;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const evaluationSchema = new Schema(
+const interviewQuestionSchema = new Schema<IInterviewQuestion>(
   {
-    score: { type: Number, required: true },
-    strengths: [{ type: String }],
-    improvements: [{ type: String }],
+    question: { type: String, required: true, trim: true },
+    answer: { type: String, default: '' },
+    confidence: { type: Number, default: 0 },
     feedback: { type: String, default: '' },
-  },
-  { _id: false }
-);
-
-const confidenceMetricsSchema = new Schema(
-  {
-    eyeContact: { type: Number, default: 0 },
-    smiling: { type: Number, default: 0 },
-    headMovement: { type: Number, default: 0 },
-    attentionLevel: { type: Number, default: 0 },
-    confidenceScore: { type: Number, default: 0 },
-    speechPace: { type: Number },
-    engagementLevel: { type: Number },
-  },
-  { _id: false }
-);
-
-const responseRecordSchema = new Schema(
-  {
-    questionId: { type: Schema.Types.ObjectId, ref: 'Question', required: true },
-    questionText: { type: String, required: true },
-    transcript: { type: String, default: '' },
-    evaluation: { type: evaluationSchema, required: true },
-    confidenceMetrics: { type: confidenceMetricsSchema },
-    videoUrl: { type: String },
+    improvements: [{ type: String }],
+    scores: {
+      clarity: { type: Number, default: 0 },
+      technical: { type: Number, default: 0 },
+      communication: { type: Number, default: 0 },
+    },
     audioUrl: { type: String },
+    askedAt: { type: Date },
+    answeredAt: { type: Date },
   },
   { _id: true }
 );
 
-const sessionScoresSchema = new Schema(
+const interviewReportSchema = new Schema<IInterviewReport>(
   {
-    relevance: { type: Number, default: 0 },
-    communication: { type: Number, default: 0 },
-    technicalDepth: { type: Number, default: 0 },
-    confidence: { type: Number, default: 0 },
-    structure: { type: Number, default: 0 },
-    clarity: { type: Number, default: 0 },
+    overallScore: { type: Number, default: 0 },
+    confidenceScore: { type: Number, default: 0 },
+    strengths: [{ type: String }],
+    weaknesses: [{ type: String }],
+    improvements: [{ type: String }],
+    summary: { type: String, default: '' },
   },
   { _id: false }
 );
@@ -102,27 +74,17 @@ const sessionScoresSchema = new Schema(
 const interviewSessionSchema = new Schema<IInterviewSession>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    category: {
-      type: String,
-      required: true,
-      enum: ['Technical', 'Behavioral', 'Leadership', 'Problem Solving', 'System Design', 'HR', 'Combined'],
-    },
-    difficulty: {
-      type: String,
-      enum: ['beginner', 'intermediate', 'advanced'],
-      default: 'intermediate',
-    },
-    questions: [
-      {
-        questionId: { type: Schema.Types.ObjectId, ref: 'Question' },
-        text: { type: String },
-      },
-    ],
-    responses: [responseRecordSchema],
-    scores: { type: sessionScoresSchema, default: () => ({}) },
-    overallScore: { type: Number, default: 0 },
-    confidenceScore: { type: Number, default: 0 },
+    role: { type: String, required: true, trim: true },
+    questions: [interviewQuestionSchema],
+    currentQuestionIndex: { type: Number, default: 0 },
     status: { type: String, enum: ['in_progress', 'completed'], default: 'in_progress' },
+    state: {
+      type: String,
+      enum: ['idle', 'asking', 'listening', 'processing', 'feedback', 'completed'],
+      default: 'idle',
+    },
+    overallScore: { type: Number, default: 0 },
+    report: { type: interviewReportSchema },
   },
   { timestamps: true }
 );

@@ -372,7 +372,7 @@ const Dashboard: React.FC = () => {
           )}
         >
           <CardContent className="p-6">
-            <div className="flex space-x-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -382,7 +382,7 @@ const Dashboard: React.FC = () => {
                   className="pl-10"
                 />
               </div>
-              <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => navigate('/jobs')}>
+              <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto" onClick={() => navigate('/jobs')}>
                 Search Jobs
               </Button>
             </div>
@@ -423,9 +423,9 @@ const Dashboard: React.FC = () => {
         <div className="space-y-8 lg:col-span-2">
           <AnimatedSection delay={0.4}>
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-2xl font-bold">Recommended for You</h2>
-                <Button variant="outline" asChild>
+                <Button variant="outline" asChild className="shrink-0">
                   <Link to="/jobs">View All</Link>
                 </Button>
               </div>
@@ -723,7 +723,7 @@ const Dashboard: React.FC = () => {
                     >
                       <h4 className="text-sm font-semibold">{interview.jobId?.title || 'Interview'}</h4>
                       <p className="text-xs text-muted-foreground">{interview.jobId?.company || 'Company'}</p>
-                      <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <span className="text-xs font-medium">
                           {new Date(interview.scheduledAt).toLocaleDateString()} at{' '}
                           {new Date(interview.scheduledAt).toLocaleTimeString([], {
@@ -731,15 +731,15 @@ const Dashboard: React.FC = () => {
                             minute: '2-digit',
                           })}
                         </span>
-                        <Badge variant="outline" className="text-xs capitalize">
+                        <Badge variant="outline" className="w-fit text-xs capitalize">
                           {interview.type || 'Interview'}
                         </Badge>
                       </div>
-                      <div className="mt-2 flex space-x-2">
-                        <Button size="sm" variant="outline" className="h-6 text-xs" asChild>
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:gap-2">
+                        <Button size="sm" variant="outline" className="h-8 text-xs sm:h-6" asChild>
                           <Link to="/interviews">Manage</Link>
                         </Button>
-                        <Button size="sm" className="h-6 text-xs" asChild>
+                        <Button size="sm" className="h-8 text-xs sm:h-6" asChild>
                           <Link to="/interview">Prepare</Link>
                         </Button>
                       </div>

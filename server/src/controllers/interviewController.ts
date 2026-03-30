@@ -1,268 +1,316 @@
 import { Response } from 'express';
 import mongoose from 'mongoose';
-import Question from '../models/Question';
 import InterviewSession from '../models/InterviewSession';
 import { AuthRequest } from '../types';
-import { evaluateWithGroq } from '../services/groqService';
-import { getFallbackEvaluation } from '../services/fallbackEvaluation';
-import { transcribeAudio } from '../services/whisperService';
-import { InterviewCategory, DifficultyLevel } from '../models/Question';
-import { generateFallbackQuestions } from '../services/fallbackQuestions';
 import logger from '../utils/logger';
+import { evaluateInterviewAnswer, generateFinalInterviewReport, generateInterviewQuestion } from '../services/groqService';
+import { synthesizeInterviewQuestion } from '../services/ttsService';
 
-const QUESTIONS_PER_SESSION = 5;
-const WEIGHTS = { relevance: 0.25, communication: 0.2, technicalDepth: 0.2, confidence: 0.15, structure: 0.1, clarity: 0.1 };
+const DEFAULT_QUESTION_COUNT = 5;
 
-function getNoResponseEvaluation() {
-  return {
-    score: 15,
-    strengths: ['Recording was received successfully'],
-    improvements: [
-      'No spoken answer was detected, so content could not be evaluated',
-      'Speak a little louder and keep the microphone closer',
-      'Answer the question directly before adding details',
-    ],
-    feedback:
-      'We could not detect enough spoken content in this response to generate a meaningful interview review. Please retry with clearer audio.',
-  };
+function average(values: number[]) {
+  if (!values.length) return 0;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
-function weightedScore(scores: Record<string, number>): number {
-  return Math.round(
-    (scores.relevance || 0) * WEIGHTS.relevance +
-    (scores.communication || 0) * WEIGHTS.communication +
-    (scores.technicalDepth || 0) * WEIGHTS.technicalDepth +
-    (scores.confidence || 0) * WEIGHTS.confidence +
-    (scores.structure || 0) * WEIGHTS.structure +
-    (scores.clarity || 0) * WEIGHTS.clarity
-  );
+async function getExcludedQuestions(userId: string, role: string, currentQuestions: string[] = []) {
+  const previousSessions = await InterviewSession.find({
+    userId: new mongoose.Types.ObjectId(userId),
+    role,
+  })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .select('questions.question')
+    .lean();
+
+  const previousQuestions = previousSessions.flatMap((session) => session.questions.map((item) => item.question));
+  return [...previousQuestions, ...currentQuestions];
 }
 
 export async function startInterview(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.userId;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-    const { category, difficulty = 'intermediate' } = req.body as { category: InterviewCategory; difficulty?: DifficultyLevel };
-    if (!category) return res.status(400).json({ error: 'Category is required' });
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
-    const categories: InterviewCategory[] =
-      category === 'Combined'
-        ? ['Technical', 'Behavioral', 'Leadership', 'Problem Solving', 'System Design', 'HR']
-        : [category];
-
-    let questions = await Question.aggregate([
-      { $match: { category: { $in: categories }, difficulty: difficulty || 'intermediate' } },
-      { $sample: { size: QUESTIONS_PER_SESSION } },
-    ]);
-    if (questions.length === 0) {
-      const fallback = generateFallbackQuestions(category, difficulty || 'intermediate', QUESTIONS_PER_SESSION);
-      questions = fallback.map((q) => ({
-        _id: q._id,
-        text: q.text,
-        category: q.category,
-        difficulty: q.difficulty,
-      })) as any;
+    const role = String(req.body.role || '').trim();
+    if (!role) {
+      return res.status(400).json({ success: false, error: 'Role is required' });
     }
+
+    const excludedQuestions = await getExcludedQuestions(userId, role);
+    const question = await generateInterviewQuestion(role, excludedQuestions);
+    const audioUrl = await synthesizeInterviewQuestion(question);
+    const firstQuestion = {
+      question,
+      answer: '',
+      confidence: 0,
+      feedback: '',
+      improvements: [],
+      scores: {
+        clarity: 0,
+        technical: 0,
+        communication: 0,
+      },
+      audioUrl: audioUrl || undefined,
+      askedAt: new Date(),
+    };
 
     const session = await InterviewSession.create({
       userId: new mongoose.Types.ObjectId(userId),
-      category,
-      difficulty: difficulty || 'intermediate',
-      questions: questions.map((q: any) => ({ questionId: q._id, text: q.text })),
-      responses: [],
+      role,
+      questions: [firstQuestion],
+      currentQuestionIndex: 0,
+      status: 'in_progress',
+      state: 'asking',
+      overallScore: 0,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        sessionId: session._id,
+        role: session.role,
+        state: session.state,
+        totalQuestions: DEFAULT_QUESTION_COUNT,
+        currentQuestionIndex: session.currentQuestionIndex,
+        question: session.questions[0],
+      },
+    });
+  } catch (error: any) {
+    logger.error('startInterview', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to start interview' });
+  }
+}
+
+export async function submitAnswer(req: AuthRequest, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { sessionId, transcript } = req.body as { sessionId?: string; transcript?: string };
+    if (!sessionId || typeof transcript !== 'string') {
+      return res.status(400).json({ success: false, error: 'sessionId and transcript are required' });
+    }
+
+    const session = await InterviewSession.findOne({
+      _id: sessionId,
+      userId: new mongoose.Types.ObjectId(userId),
       status: 'in_progress',
     });
-    return res.json({
-      success: true,
-      data: {
-        sessionId: session._id,
-        category: session.category,
-        difficulty: session.difficulty,
-        totalQuestions: session.questions.length,
-        question: session.questions[0],
-        questionIndex: 0,
-      },
-    });
-  } catch (err: any) {
-    logger.error('startInterview', err);
-    return res.status(500).json({ error: err.message || 'Failed to start interview' });
-  }
-}
 
-export async function getQuestion(req: AuthRequest, res: Response) {
-  try {
-    const userId = req.user?.userId;
-    const { sessionId, questionIndex } = req.query;
-    if (!sessionId || questionIndex === undefined) return res.status(400).json({ error: 'sessionId and questionIndex required' });
-    const session = await InterviewSession.findOne({
-      _id: sessionId,
-      userId: new mongoose.Types.ObjectId(userId),
-    });
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    const idx = parseInt(questionIndex as string, 10);
-    if (idx < 0 || idx >= session.questions.length) return res.status(404).json({ error: 'Question not found' });
-    return res.json({
-      success: true,
-      data: { question: session.questions[idx], questionIndex: idx, totalQuestions: session.questions.length },
-    });
-  } catch (err: any) {
-    logger.error('getQuestion', err);
-    return res.status(500).json({ error: err.message || 'Failed to get question' });
-  }
-}
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Interview session not found' });
+    }
 
-export async function uploadResponse(req: AuthRequest, res: Response) {
-  try {
-    const userId = req.user?.userId;
-    const { sessionId, questionIndex } = req.body;
-    const confidenceMetrics = req.body.confidenceMetrics ? JSON.parse(req.body.confidenceMetrics) : undefined;
-    const file = (req as any).file;
-    if (!sessionId || questionIndex === undefined) return res.status(400).json({ error: 'sessionId and questionIndex required' });
-    const session = await InterviewSession.findOne({
-      _id: sessionId,
-      userId: new mongoose.Types.ObjectId(userId),
-    });
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    const idx = parseInt(questionIndex, 10);
-    if (idx < 0 || idx >= session.questions.length) return res.status(400).json({ error: 'Invalid question index' });
-    const q = session.questions[idx];
-    let transcript = '';
-    let transcriptSource: 'uploaded-media' | 'provided-text' | 'none' = 'none';
-    let usedFallbackEvaluation = false;
-    if (file?.buffer) {
-      try {
-        transcript = await transcribeAudio(file.buffer, file.mimetype);
-        transcriptSource = transcript.trim() ? 'uploaded-media' : 'none';
-      } catch (e) {
-        logger.warn('Transcription failed, using empty transcript', e);
-      }
+    const currentQuestion = session.questions[session.currentQuestionIndex];
+    if (!currentQuestion) {
+      return res.status(400).json({ success: false, error: 'Current question not found' });
     }
-    if (!transcript.trim() && typeof req.body.transcript === 'string') {
-      transcript = req.body.transcript;
-      transcriptSource = transcript.trim() ? 'provided-text' : 'none';
-    }
-    const normalizedTranscript = transcript.trim();
-    let evaluation = normalizedTranscript
-      ? await evaluateWithGroq(q.text, normalizedTranscript, confidenceMetrics)
-      : getNoResponseEvaluation();
-    if (!evaluation) {
-      evaluation = getFallbackEvaluation(session.category as InterviewCategory);
-      usedFallbackEvaluation = true;
-    }
-    const responseRecord = {
-      questionId: q.questionId,
-      questionText: q.text,
-      transcript: normalizedTranscript,
-      evaluation: {
-        score: evaluation.score,
-        strengths: evaluation.strengths || [],
-        improvements: evaluation.improvements || [],
-        feedback: evaluation.feedback || '',
-      },
-      confidenceMetrics,
+
+    const cleanTranscript = transcript.trim();
+    const evaluation = await evaluateInterviewAnswer(cleanTranscript);
+
+    currentQuestion.answer = cleanTranscript;
+    currentQuestion.confidence = evaluation.confidence;
+    currentQuestion.feedback = evaluation.feedback;
+    currentQuestion.improvements = evaluation.improvements;
+    currentQuestion.scores = {
+      clarity: evaluation.clarity,
+      technical: evaluation.technical,
+      communication: evaluation.communication,
     };
-    session.responses.push(responseRecord as any);
-    const nextIndex = idx + 1;
-    if (nextIndex >= session.questions.length) {
-      session.status = 'completed';
-      const avgScore = session.responses.reduce((s, r) => s + r.evaluation.score, 0) / session.responses.length;
-      session.overallScore = Math.round(avgScore);
-      const avgConf = session.responses
-        .filter((r: any) => r.confidenceMetrics?.confidenceScore != null)
-        .reduce((s: number, r: any) => s + (r.confidenceMetrics?.confidenceScore ?? 0), 0);
-      const confCount = session.responses.filter((r: any) => r.confidenceMetrics?.confidenceScore != null).length;
-      session.confidenceScore = confCount > 0 ? Math.round(avgConf / confCount) : session.overallScore;
-      session.scores = {
-        relevance: Math.round(avgScore),
-        communication: Math.round(avgScore),
-        technicalDepth: Math.round(avgScore),
-        confidence: session.confidenceScore,
-        structure: Math.round(avgScore),
-        clarity: Math.round(avgScore),
-      };
-    }
+    currentQuestion.answeredAt = new Date();
+
+    session.state = 'feedback';
+    session.overallScore = average(
+      session.questions
+        .filter((item) => item.answer.trim())
+        .map((item) => average([item.confidence, item.scores.clarity, item.scores.technical, item.scores.communication]))
+    );
+
     await session.save();
-    if (nextIndex >= session.questions.length) {
-      await InterviewSession.deleteMany({
-        userId: new mongoose.Types.ObjectId(userId),
-        status: 'completed',
-        _id: { $ne: session._id },
-      });
-    }
+
     return res.json({
       success: true,
       data: {
-        transcript: normalizedTranscript,
-        evaluation: responseRecord.evaluation,
-        confidenceMetrics: responseRecord.confidenceMetrics,
-        nextQuestionIndex: nextIndex >= session.questions.length ? null : nextIndex,
-        isComplete: nextIndex >= session.questions.length,
         sessionId: session._id,
-        usedFallbackEvaluation,
-        transcriptDetected: normalizedTranscript.length > 0,
-        transcriptSource,
+        state: session.state,
+        questionIndex: session.currentQuestionIndex,
+        evaluation: {
+          confidence: currentQuestion.confidence,
+          clarity: currentQuestion.scores.clarity,
+          technical: currentQuestion.scores.technical,
+          communication: currentQuestion.scores.communication,
+          feedback: currentQuestion.feedback,
+          improvements: currentQuestion.improvements,
+        },
+        hasMoreQuestions: session.questions.length < DEFAULT_QUESTION_COUNT,
       },
     });
-  } catch (err: any) {
-    logger.error('uploadResponse', err);
-    return res.status(500).json({ error: err.message || 'Failed to process response' });
+  } catch (error: any) {
+    logger.error('submitAnswer', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to evaluate answer' });
   }
 }
 
-export async function evaluateOnly(req: AuthRequest, res: Response) {
+export async function getNextQuestion(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.userId;
-    const { sessionId, questionIndex, transcript } = req.body;
-    if (!sessionId || questionIndex === undefined || transcript === undefined) {
-      return res.status(400).json({ error: 'sessionId, questionIndex, and transcript required' });
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const sessionId = String(req.query.sessionId || '').trim();
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: 'sessionId is required' });
     }
+
+    const session = await InterviewSession.findOne({
+      _id: sessionId,
+      userId: new mongoose.Types.ObjectId(userId),
+      status: 'in_progress',
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Interview session not found' });
+    }
+
+    const currentQuestion = session.questions[session.currentQuestionIndex];
+    if (currentQuestion && !currentQuestion.answer.trim()) {
+      return res.status(400).json({ success: false, error: 'Answer the current question before moving on' });
+    }
+
+    if (session.questions.length >= DEFAULT_QUESTION_COUNT) {
+      return res.status(400).json({ success: false, error: 'Interview question limit reached' });
+    }
+
+    const excludedQuestions = await getExcludedQuestions(
+      userId,
+      session.role,
+      session.questions.map((item) => item.question)
+    );
+    const nextQuestionText = await generateInterviewQuestion(session.role, excludedQuestions);
+    const nextQuestionAudio = await synthesizeInterviewQuestion(nextQuestionText);
+    const nextQuestion = {
+      question: nextQuestionText,
+      answer: '',
+      confidence: 0,
+      feedback: '',
+      improvements: [],
+      scores: {
+        clarity: 0,
+        technical: 0,
+        communication: 0,
+      },
+      audioUrl: nextQuestionAudio || undefined,
+      askedAt: new Date(),
+    };
+    session.questions.push(nextQuestion as any);
+    session.currentQuestionIndex = session.questions.length - 1;
+    session.state = 'asking';
+    await session.save();
+
+    return res.json({
+      success: true,
+      data: {
+        sessionId: session._id,
+        state: session.state,
+        currentQuestionIndex: session.currentQuestionIndex,
+        totalQuestions: DEFAULT_QUESTION_COUNT,
+        question: session.questions[session.currentQuestionIndex],
+      },
+    });
+  } catch (error: any) {
+    logger.error('getNextQuestion', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to load next question' });
+  }
+}
+
+export async function completeInterview(req: AuthRequest, res: Response) {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { sessionId } = req.body as { sessionId?: string };
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: 'sessionId is required' });
+    }
+
     const session = await InterviewSession.findOne({
       _id: sessionId,
       userId: new mongoose.Types.ObjectId(userId),
     });
-    if (!session) return res.status(404).json({ error: 'Session not found' });
-    const idx = parseInt(questionIndex, 10);
-    if (idx < 0 || idx >= session.questions.length) return res.status(400).json({ error: 'Invalid question index' });
-    const q = session.questions[idx];
-    const normalizedTranscript = String(transcript).trim();
-    let evaluation = normalizedTranscript
-      ? await evaluateWithGroq(q.text, normalizedTranscript)
-      : getNoResponseEvaluation();
-    if (!evaluation) evaluation = getFallbackEvaluation(session.category as InterviewCategory);
-    return res.json({ success: true, data: { evaluation } });
-  } catch (err: any) {
-    logger.error('evaluateOnly', err);
-    return res.status(500).json({ error: err.message || 'Failed to evaluate' });
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Interview session not found' });
+    }
+
+    const report = await generateFinalInterviewReport(session.role, session.questions.map((item) => ({
+      question: item.question,
+      answer: item.answer,
+      confidence: item.confidence,
+      feedback: item.feedback,
+      scores: item.scores,
+    })));
+
+    session.report = report;
+    session.overallScore = report.overallScore;
+    session.status = 'completed';
+    session.state = 'completed';
+    await session.save();
+
+    return res.json({
+      success: true,
+      data: {
+        sessionId: session._id,
+        role: session.role,
+        overallScore: session.overallScore,
+        report: session.report,
+        questions: session.questions,
+        createdAt: session.createdAt,
+      },
+    });
+  } catch (error: any) {
+    logger.error('completeInterview', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to complete interview' });
   }
 }
 
 export async function getResult(req: AuthRequest<{ sessionId: string }>, res: Response) {
   try {
     const userId = req.user?.userId;
-    const { sessionId } = req.params;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const session = await InterviewSession.findOne({
-      _id: sessionId,
+      _id: req.params.sessionId,
       userId: new mongoose.Types.ObjectId(userId),
     }).lean();
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Interview session not found' });
+    }
+
     return res.json({ success: true, data: session });
-  } catch (err: any) {
-    logger.error('getResult', err);
-    return res.status(500).json({ error: err.message || 'Failed to get result' });
+  } catch (error: any) {
+    logger.error('getResult', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to get interview result' });
   }
 }
 
 export async function getHistory(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.userId;
-    const sessions = await InterviewSession.find({ userId: new mongoose.Types.ObjectId(userId), status: 'completed' })
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const sessions = await InterviewSession.find({
+      userId: new mongoose.Types.ObjectId(userId),
+      status: 'completed',
+    })
       .sort({ createdAt: -1 })
-      .limit(1)
-      .select('category difficulty overallScore confidenceScore status createdAt questions')
+      .limit(5)
       .lean();
+
     return res.json({ success: true, data: sessions });
-  } catch (err: any) {
-    logger.error('getHistory', err);
-    return res.status(500).json({ error: err.message || 'Failed to get history' });
+  } catch (error: any) {
+    logger.error('getHistory', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to load interview history' });
   }
 }

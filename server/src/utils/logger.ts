@@ -21,13 +21,39 @@ class Logger {
     this.logLevel = config.nodeEnv === 'production' ? LogLevel.INFO : LogLevel.DEBUG;
   }
 
+  private normalizeMeta(meta?: any): any {
+    if (meta instanceof Error) {
+      return {
+        name: meta.name,
+        message: meta.message,
+        stack: meta.stack,
+        ...(meta as any).cause ? { cause: (meta as any).cause } : {},
+      };
+    }
+
+    if (Array.isArray(meta)) {
+      return meta.map((item) => this.normalizeMeta(item));
+    }
+
+    if (!meta || typeof meta !== 'object') {
+      return meta;
+    }
+
+    const normalized: Record<string, any> = {};
+    for (const [key, value] of Object.entries(meta)) {
+      normalized[key] = value instanceof Error ? this.normalizeMeta(value) : value;
+    }
+    return normalized;
+  }
+
   private formatMessage(level: string, message: string, meta?: any): string {
     const timestamp = new Date().toISOString();
+    const normalizedMeta = this.normalizeMeta(meta);
     const logEntry: LogEntry = {
       level: level.toUpperCase(),
       message,
       timestamp,
-      ...(meta && { meta }),
+      ...(normalizedMeta && { meta: normalizedMeta }),
     };
 
     if (config.nodeEnv === 'production') {
@@ -46,8 +72,8 @@ class Logger {
     const color = colors[level.toUpperCase() as keyof typeof colors] || colors.RESET;
     let formatted = `${color}[${timestamp}] ${level.toUpperCase()}:${colors.RESET} ${message}`;
 
-    if (meta) {
-      formatted += `\n${colors.DEBUG}Meta:${colors.RESET} ${JSON.stringify(meta, null, 2)}`;
+    if (normalizedMeta) {
+      formatted += `\n${colors.DEBUG}Meta:${colors.RESET} ${JSON.stringify(normalizedMeta, null, 2)}`;
     }
 
     return formatted;

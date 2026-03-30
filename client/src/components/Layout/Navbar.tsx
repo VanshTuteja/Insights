@@ -100,14 +100,14 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
       animate={{ y: 0 }}
       className="sticky top-0 z-50 h-16 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
     >
-      <div className="container mx-auto px-4">
+      <div className="mx-auto h-full w-full max-w-screen-2xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <div className="flex min-w-0 items-center space-x-2 sm:space-x-4">
             <Button variant="ghost" size="sm" className="md:hidden" onClick={onToggleSidebar}>
               <Menu className="h-5 w-5" />
             </Button>
 
-            <Link to="/" className="hidden items-center space-x-2 md:flex">
+            <Link to="/" className="flex min-w-0 items-center space-x-2">
               <motion.div
                 whileHover={{ scale: 1.1, rotate: 360 }}
                 transition={{ duration: 0.5 }}
@@ -115,13 +115,13 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
               >
                 <Briefcase className="h-4 w-4 text-white" />
               </motion.div>
-              <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-xl font-bold text-transparent">
+              <span className="hidden truncate bg-gradient-to-r from-primary to-secondary bg-clip-text text-lg font-bold text-transparent sm:block md:text-xl">
                 JobFinder AI
               </span>
             </Link>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             {isJobSeeker ? (
               <div className="relative">
                 <Button variant="ghost" size="sm" className="notification-dropdown-trigger relative" onClick={() => void openNotifications()}>
@@ -138,7 +138,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.1 }}
-                    className="notification-dropdown absolute right-0 z-50 mt-2 w-[22rem] rounded-2xl border bg-popover shadow-lg"
+                    className="notification-dropdown absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-1.5rem))] rounded-2xl border bg-popover shadow-lg"
                   >
                     <div className="flex items-center justify-between border-b px-4 py-3">
                       <div>
@@ -206,9 +206,9 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
             ) : null}
 
             <div className="relative">
-              <Button variant="outline" size="sm" className="theme-dropdown-trigger" onClick={() => setThemeDropdownOpen(!themeDropdownOpen)}>
-                <Palette className="mr-2 h-4 w-4" />
-                Theme
+              <Button variant="outline" size="sm" className="theme-dropdown-trigger px-2.5 sm:px-3" onClick={() => setThemeDropdownOpen(!themeDropdownOpen)}>
+                <Palette className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Theme</span>
               </Button>
 
               {themeDropdownOpen ? (
@@ -216,7 +216,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.1 }}
-                  className="theme-dropdown absolute right-0 z-50 mt-2 w-48 rounded-md border bg-popover shadow-lg"
+                  className="theme-dropdown absolute right-0 z-50 mt-2 w-48 max-w-[calc(100vw-1.5rem)] rounded-md border bg-popover shadow-lg"
                 >
                   <div className="p-1">
                     {themes.map((t) => (
