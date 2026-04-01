@@ -68,9 +68,6 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email
 SMTP_PASS=your_password
-
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=strong-password
 ```
 
 Suggested frontend variables:
