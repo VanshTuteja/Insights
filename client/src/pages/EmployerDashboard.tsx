@@ -125,7 +125,7 @@ const EmployerDashboard: React.FC = () => {
 
       if (appsRes.status === 'fulfilled') {
         const items = appsRes.value.data?.data || [];
-        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const API_BASE_URL ='https://job-finder-4cem.onrender.com/api';
         const fileBase = API_BASE_URL.replace(/\/api\/?$/, '');
 
           const mapped = items.map((item: any) => {
@@ -300,7 +300,7 @@ const EmployerDashboard: React.FC = () => {
     try {
       const response = await axios.get(`/applications/job/${job.id || job._id}`);
       const items = response.data?.data || [];
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const API_BASE_URL ='https://job-finder-4cem.onrender.com/api';
       const fileBase = API_BASE_URL.replace(/\/api\/?$/, '');
 
       const mapped = items.map((item: any) => {
