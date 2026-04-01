@@ -7,6 +7,23 @@ import { AuthRequest } from '../types';
 import type { ApplicationStatus } from '../models/Application';
 import { createNotificationForUsers } from './notificationController';
 
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 50;
+
+function parsePositiveInt(value: unknown, fallback: number) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (Number.isNaN(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+function parsePagination(query: Record<string, unknown>) {
+  const page = parsePositiveInt(query.page, DEFAULT_PAGE);
+  const limit = Math.min(parsePositiveInt(query.limit, DEFAULT_LIMIT), MAX_LIMIT);
+  const skip = (page - 1) * limit;
+  return { page, limit, skip };
+}
+
 /** POST /applications/apply – Job seeker applies; creates Application doc (source of truth). */
 export const applyForJob = async (req: AuthRequest, res: Response) => {
   try {
@@ -87,11 +104,15 @@ export const applyForJob = async (req: AuthRequest, res: Response) => {
 export const getCandidateApplications = async (req: AuthRequest, res: Response) => {
   try {
     const candidateId = req.user?.userId;
+    const { page, limit, skip } = parsePagination(req.query as Record<string, unknown>);
 
     const applications = await Application.find({ candidateId })
       .populate('jobId', 'title company location salary type createdAt')
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
+    const total = await Application.countDocuments({ candidateId });
 
     const jobIds = applications.map((a: any) => a.jobId?._id ?? a.jobId).filter(Boolean);
     const interviews = await Interview.find({
@@ -125,6 +146,12 @@ export const getCandidateApplications = async (req: AuthRequest, res: Response) 
     return res.json({
       success: true,
       data: list,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -140,6 +167,7 @@ export const getJobApplications = async (req: AuthRequest, res: Response) => {
   try {
     const { jobId } = req.params as { jobId?: string };
     const userId = req.user?.userId;
+    const { page, limit, skip } = parsePagination(req.query as Record<string, unknown>);
 
     if (!jobId) {
       return res.status(400).json({
@@ -164,7 +192,11 @@ export const getJobApplications = async (req: AuthRequest, res: Response) => {
 
     const applications = await Application.find({ jobId })
       .populate('candidateId', 'name email avatar phone bio skills experience education location jobTitle resumeUrl')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    const total = await Application.countDocuments({ jobId });
 
     const candidateIds = applications.map((a) => (a as any).candidateId?._id ?? a.candidateId);
     const interviews = await Interview.find({
@@ -196,6 +228,12 @@ export const getJobApplications = async (req: AuthRequest, res: Response) => {
     return res.json({
       success: true,
       data: list,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -210,14 +248,19 @@ export const getJobApplications = async (req: AuthRequest, res: Response) => {
 export const getEmployerApplications = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
+    const { page, limit, skip } = parsePagination(req.query as Record<string, unknown>);
 
-    const employerJobs = await Job.find({ employerId: userId }).select('_id title company');
+    const employerJobs = await Job.find({ employerId: userId }).select('_id title company').lean();
     const jobIds = employerJobs.map((j) => j._id);
 
     const applications = await Application.find({ jobId: { $in: jobIds } })
       .populate('jobId', 'title company')
       .populate('candidateId', 'name email avatar phone bio skills experience education location')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    const total = await Application.countDocuments({ jobId: { $in: jobIds } });
 
     const jobMap = new Map(employerJobs.map((j) => [j._id.toString(), j]));
     const list = applications.map((app: any) => ({
@@ -234,6 +277,12 @@ export const getEmployerApplications = async (req: AuthRequest, res: Response) =
     return res.json({
       success: true,
       data: list,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error: any) {
     return res.status(500).json({

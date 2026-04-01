@@ -5,8 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon server/src/server.ts",
-    "build": "npm install && npm install --prefix client && npm run build --prefix client",
-    "start": "nodemon server/src/server.ts",
+    "build": "npm install --prefix client && npm run build --prefix client && npx tsc -p server/tsconfig.json",
+    "start": "node server/dist/server.js",
     "clean": "rimraf dist",
     "seed": "ts-node -r tsconfig-paths/register src/seed/seed.ts"
   },

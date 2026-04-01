@@ -9,6 +9,7 @@ import logger from '../utils/logger';
 import { withProfileCompletion } from '../utils/profileCompletion';
 
 const ACTIVE_WINDOW_HOURS = 24;
+const RECENT_LIMIT = 8;
 
 export async function getAdminOverview(req: AuthRequest, res: Response) {
   try {
@@ -43,21 +44,25 @@ export async function getAdminOverview(req: AuthRequest, res: Response) {
       User.find({})
         .select('name email role company jobTitle location isVerified lastLoginAt createdAt')
         .sort({ createdAt: -1 })
-        .limit(8),
+        .limit(RECENT_LIMIT)
+        .lean(),
       Job.find({})
         .select('title company location type isActive createdAt')
         .sort({ createdAt: -1 })
-        .limit(8),
+        .limit(RECENT_LIMIT)
+        .lean(),
       Application.find({})
         .populate('candidateId', 'name email')
         .populate('jobId', 'title company')
         .sort({ createdAt: -1 })
-        .limit(8),
+        .limit(RECENT_LIMIT)
+        .lean(),
       Interview.find({})
         .populate('candidateId', 'name email')
         .populate('jobId', 'title company')
         .sort({ createdAt: -1 })
-        .limit(8),
+        .limit(RECENT_LIMIT)
+        .lean(),
     ]);
 
     return res.json({

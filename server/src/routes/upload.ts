@@ -2,7 +2,8 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'fs/promises';
 import path from 'path';
-import { createReadStream } from 'fs';
+import { createReadStream, mkdirSync } from 'fs';
+import { Readable } from 'stream';
 import { authenticateToken, requireRole } from '../middleware/auth';
 import User from '../models/Users';
 import { AuthRequest } from '../types';
@@ -11,8 +12,22 @@ import { isCloudinaryConfigured, uploadBufferToCloudinary } from '../utils/cloud
 const router = express.Router();
 const uploadsDir = path.join(process.cwd(), 'uploads');
 
+const ensureUploadsDirSync = () => {
+  mkdirSync(uploadsDir, { recursive: true });
+};
+
 const resumeUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      ensureUploadsDirSync();
+      cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+      const userId = (req as AuthRequest).user?.userId || 'anonymous';
+      const ext = path.extname(file.originalname || '') || '.pdf';
+      cb(null, `resume_${userId}_${Date.now()}${sanitizeName(ext)}`);
+    },
+  }),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const normalizedName = (file.originalname || '').toLowerCase();
@@ -78,7 +93,7 @@ router.post(
         return res.status(401).json({ success: false, message: 'Unauthorized' });
       }
 
-      const resumeUrl = await saveBufferLocally(req.file, 'resume', userId);
+      const resumeUrl = `/uploads/${path.basename(req.file.path)}`;
 
       const user = await User.findByIdAndUpdate(
         userId,
@@ -206,8 +221,15 @@ router.get(
         });
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      return res.send(Buffer.from(arrayBuffer));
+      if (!response.body) {
+        return res.status(404).json({
+          success: false,
+          message: 'Stored resume file returned no readable stream.',
+        });
+      }
+
+      Readable.fromWeb(response.body as any).pipe(res);
+      return;
     } catch (error: any) {
       return res.status(500).json({
         success: false,

@@ -12,6 +12,16 @@ import { fetchAdzunaJobs } from '../services/adzunaService';
 import { calculateJobMatchScore, MATCH_THRESHOLD } from '../utils/jobMatching';
 import emailService from '../utils/emailService';
 
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
+
+function parsePositiveInt(value: unknown, fallback: number) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (Number.isNaN(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
 export const getJobs = async (req: Request, res: Response) => {
   try {
     const {
@@ -25,6 +35,9 @@ export const getJobs = async (req: Request, res: Response) => {
     } = req.query;
 
     const query: any = { isActive: true };
+    const requestedPage = parsePositiveInt(page, DEFAULT_PAGE);
+    const requestedLimit = Math.min(parsePositiveInt(limit, DEFAULT_LIMIT), MAX_LIMIT);
+    const offset = (requestedPage - 1) * requestedLimit;
 
     // Search functionality (text index)
     if (search) {
@@ -54,12 +67,11 @@ export const getJobs = async (req: Request, res: Response) => {
 
     const localJobs = await Job.find(query)
       .populate('employerId', 'name company')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(offset + requestedLimit)
+      .lean();
 
     const localTotal = await Job.countDocuments(query);
-    const requestedPage = Number(page);
-    const requestedLimit = Number(limit);
-    const offset = (requestedPage - 1) * requestedLimit;
 
     const externalOffset = Math.max(0, offset - localTotal);
     const externalPage = Math.floor(externalOffset / requestedLimit) + 1;
@@ -98,15 +110,15 @@ export const getJobs = async (req: Request, res: Response) => {
     let personalizedUser = null;
     if ((req as AuthRequest).user?.userId && (req as AuthRequest).user?.role === 'jobseeker') {
       personalizedUser = await User.findById((req as AuthRequest).user?.userId)
-        .select('skills jobTitle preferences');
+        .select('skills jobTitle preferences')
+        .lean();
     }
 
     const combinedJobs = [...localJobs, ...externalJobs].map((job: any) => {
       if (!personalizedUser || job?.isExternal) return job;
-      const rawJob = typeof job.toObject === 'function' ? job.toObject() : job;
       return {
-        ...rawJob,
-        matchScore: calculateJobMatchScore(personalizedUser as any, rawJob),
+        ...job,
+        matchScore: calculateJobMatchScore(personalizedUser as any, job),
       };
     });
     const paginatedJobs = combinedJobs.slice(offset, offset + requestedLimit);
@@ -136,13 +148,26 @@ export const getJobs = async (req: Request, res: Response) => {
 export const getEmployerJobs = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
+    const requestedPage = parsePositiveInt(req.query.page, DEFAULT_PAGE);
+    const requestedLimit = Math.min(parsePositiveInt(req.query.limit, DEFAULT_LIMIT), MAX_LIMIT);
+    const skip = (requestedPage - 1) * requestedLimit;
 
     const jobs = await Job.find({ employerId: userId })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(requestedLimit)
+      .lean();
+    const total = await Job.countDocuments({ employerId: userId });
 
     return res.json({
       success: true,
       data: jobs,
+      pagination: {
+        page: requestedPage,
+        limit: requestedLimit,
+        total,
+        pages: Math.ceil(total / requestedLimit),
+      },
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -449,7 +474,7 @@ export const getSavedJobs = async (req: AuthRequest, res: Response) => {
         path: 'employerId',
         select: 'name company'
       }
-    });
+    }).lean();
 
     if (!user) {
       return res.status(404).json({

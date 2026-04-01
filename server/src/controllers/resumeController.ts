@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import fs from 'fs/promises';
 import User from '../models/Users';
 import { AuthRequest } from '../types';
 import logger from '../utils/logger';
@@ -117,6 +118,7 @@ function parseStructuredResumeSections(resume: StructuredResume): ResumeStructur
 }
 
 export async function analyzeResume(req: AuthRequest, res: Response) {
+  let tempFilePath: string | undefined;
   try {
     const file = req.file;
     if (!file) {
@@ -126,7 +128,9 @@ export async function analyzeResume(req: AuthRequest, res: Response) {
       });
     }
 
-    const parsed = await pdfParse(file.buffer);
+    tempFilePath = file.path;
+    const fileBuffer = await fs.readFile(file.path);
+    const parsed = await pdfParse(fileBuffer);
     const resumeText = compactText(parsed?.text || '', 12000);
 
     if (!resumeText) {
@@ -173,6 +177,10 @@ export async function analyzeResume(req: AuthRequest, res: Response) {
       success: false,
       message: error.message || 'Failed to analyze resume',
     });
+  } finally {
+    if (tempFilePath) {
+      await fs.unlink(tempFilePath).catch(() => undefined);
+    }
   }
 }
 
