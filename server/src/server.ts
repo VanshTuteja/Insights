@@ -34,7 +34,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 // Security middleware
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 app.use(cors({
   origin(origin, callback) {
     if (!origin) {
@@ -141,7 +145,20 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
 });
 
 
-app.use('/uploads', express.static(path.join(DIRNAME, 'uploads')));
+app.use(
+  '/uploads',
+  cors({
+    origin: true,
+    credentials: false,
+    methods: ['GET', 'HEAD', 'OPTIONS'],
+  }),
+  express.static(path.join(DIRNAME, 'uploads'), {
+    setHeaders: (res) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    },
+  })
+);
 app.use(express.static(path.join(DIRNAME, "/client/dist")));
 
 // 404 handler

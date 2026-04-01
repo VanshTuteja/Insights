@@ -53,6 +53,8 @@ const Jobs: React.FC = () => {
     'DevOps Engineer',
   ];
 
+  const hasActiveFilters = Boolean(searchQuery || locationFilter || salaryFilter);
+
   useEffect(() => {
     void handleSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,6 +115,25 @@ const Jobs: React.FC = () => {
   const handleViewDetails = (job: any) => {
     setSelectedJob(job);
     setJobDetailsOpen(true);
+  };
+
+  const handleResetFilters = async () => {
+    setSearchQuery('');
+    setLocationFilter('');
+    setSalaryFilter('');
+    setLoading(true);
+
+    try {
+      await fetchJobs({ page: 1, limit: 12 });
+    } catch (error: any) {
+      toast({
+        title: 'Failed to reset filters',
+        description: error.response?.data?.message || 'Please try again later.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveJob = async (jobId: string) => {
@@ -288,9 +309,20 @@ const Jobs: React.FC = () => {
                   </motion.div>
                 ))}
               </div>
-              <Button onClick={handleSearch} disabled={loading} className="w-full bg-gradient-to-r from-primary to-secondary lg:w-auto">
-                {loading ? <LoadingSpinner size="sm" /> : 'Search'}
-              </Button>
+              <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                <Button onClick={handleSearch} disabled={loading} className="w-full bg-gradient-to-r from-primary to-secondary sm:w-auto">
+                  {loading ? <LoadingSpinner size="sm" /> : 'Search'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleResetFilters}
+                  disabled={loading || !hasActiveFilters}
+                  className="w-full sm:w-auto"
+                >
+                  Reset Filters
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
