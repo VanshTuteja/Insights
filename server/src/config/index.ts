@@ -98,6 +98,7 @@ export const config = {
   },
 
   googleTts: {
+    apiKey: sanitizeEnvString(process.env.GOOGLE_TTS_API_KEY),
     language: sanitizeEnvString(process.env.GOOGLE_TTS_LANGUAGE) || 'hi-IN',
     voice: sanitizeEnvString(process.env.GOOGLE_TTS_VOICE) || 'hi-IN-Wavenet-A',
   },

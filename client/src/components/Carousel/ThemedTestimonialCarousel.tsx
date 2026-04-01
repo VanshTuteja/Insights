@@ -12,10 +12,28 @@ interface TestimonialItem {
   company: string;
   content: string;
   rating: number;
-  avatar: string;
+  avatar?: string;
 }
 
+function createAvatarDataUri(name: string, backgroundColor: string) {
+  const initials = name
+    .split(' ')
+    .map((part) => part[0] || '')
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+      <rect width="120" height="120" rx="60" fill="${backgroundColor}" />
+      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="#ffffff">
+        ${initials}
+      </text>
+    </svg>
+  `.trim();
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
 
 const TestimonialCarousel: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -214,6 +232,13 @@ const TestimonialCarousel: React.FC = () => {
                               alt={testimonial.name}
                               className="h-12 w-12 rounded-full border-2"
                               style={{ borderColor: darkTheme ? 'rgba(255,255,255,0.2)' : hexToRgba(themePreview.primary, 0.16) }}
+                              onError={(event) => {
+                                event.currentTarget.onerror = null;
+                                event.currentTarget.src = createAvatarDataUri(
+                                  testimonial.name,
+                                  themePreview.primary
+                                );
+                              }}
                             />
                             <div>
                               <p className={cn('font-semibold', darkTheme ? 'text-white' : 'text-foreground')}>

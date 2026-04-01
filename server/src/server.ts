@@ -23,6 +23,10 @@ const app = express();
 
 const DIRNAME = path.resolve();
 
+// Render and similar platforms terminate TLS and forward the real client IP.
+// Trust the first proxy so rate limiting and req.ip work correctly.
+app.set('trust proxy', 1);
+
 // default middleware for any mern project
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));

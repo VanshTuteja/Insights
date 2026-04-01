@@ -571,7 +571,7 @@ export default function InterviewPrep() {
                         </div>
                         <div>
                           <p className="font-semibold text-foreground">AI Interviewer</p>
-                          <p className="text-sm text-muted-foreground">Google TTS voice with Groq-generated verbal questions</p>
+                          <p className="text-sm text-muted-foreground">Google Cloud TTS voice with Groq-generated interview questions</p>
                         </div>
                       </div>
                       <div className="mb-4 flex h-20 items-end gap-2">
@@ -585,8 +585,8 @@ export default function InterviewPrep() {
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {currentQuestion?.audioUrl
-                          ? 'Question audio is ready and optimized for a short spoken round.'
-                          : 'Voice audio is unavailable, but the text question is ready.'}
+                          ? 'Question audio is ready for this round.'
+                          : 'Question audio is currently unavailable, but the text question is ready.'}
                       </p>
                     </div>
                   </div>
