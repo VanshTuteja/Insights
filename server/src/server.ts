@@ -103,8 +103,8 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
   if (error.code === 'LIMIT_FILE_SIZE') {
     return res.status(400).json({
       success: false,
-      message: 'File too large. Profile photos can be up to 15MB and resumes up to 10MB.',
-      error: 'File too large. Profile photos can be up to 15MB and resumes up to 10MB.'
+      message: 'File too large. Profile photos can be up to 25MB and resumes up to 10MB.',
+      error: 'File too large. Profile photos can be up to 25MB and resumes up to 10MB.'
     });
   }
 

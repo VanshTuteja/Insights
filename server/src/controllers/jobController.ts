@@ -65,22 +65,31 @@ export const getJobs = async (req: Request, res: Response) => {
       query.tags = { $in: tagArray };
     }
 
-    const localJobs = await Job.find(query)
-      .populate('employerId', 'name company')
-      .sort({ createdAt: -1 })
-      .limit(offset + requestedLimit)
-      .lean();
-
     const localTotal = await Job.countDocuments(query);
+    const localSkip = Math.min(offset, localTotal);
+    const localLimit = Math.max(0, Math.min(requestedLimit, localTotal - localSkip));
+
+    const localJobs = localLimit > 0
+      ? await Job.find(query)
+          .populate('employerId', 'name company')
+          .sort({ createdAt: -1 })
+          .skip(localSkip)
+          .limit(localLimit)
+          .lean()
+      : [];
 
     const externalOffset = Math.max(0, offset - localTotal);
-    const externalPage = Math.floor(externalOffset / requestedLimit) + 1;
-    const externalOffsetInWindow = externalOffset % requestedLimit;
+    const externalLimitNeeded = Math.max(0, requestedLimit - localJobs.length);
+    const externalPage = externalLimitNeeded > 0
+      ? Math.floor(externalOffset / requestedLimit) + 1
+      : 1;
+    const externalOffsetInWindow = externalLimitNeeded > 0 ? externalOffset % requestedLimit : 0;
 
     let externalJobs: any[] = [];
     let externalTotal = 0;
 
-    try {
+    if (externalLimitNeeded > 0) {
+      try {
       const [firstExternal, secondExternal] = await Promise.all([
         fetchAdzunaJobs({
           search: search as string | undefined,
@@ -102,9 +111,10 @@ export const getJobs = async (req: Request, res: Response) => {
 
       externalTotal = firstExternal.total;
       externalJobs = [...firstExternal.jobs, ...secondExternal.jobs];
-      externalJobs = externalJobs.slice(externalOffsetInWindow, externalOffsetInWindow + requestedLimit);
+      externalJobs = externalJobs.slice(externalOffsetInWindow, externalOffsetInWindow + externalLimitNeeded);
     } catch (externalError: any) {
       logger.warn('External job fetch failed', { error: externalError.message });
+    }
     }
 
     let personalizedUser = null;
@@ -121,13 +131,12 @@ export const getJobs = async (req: Request, res: Response) => {
         matchScore: calculateJobMatchScore(personalizedUser as any, job),
       };
     });
-    const paginatedJobs = combinedJobs.slice(offset, offset + requestedLimit);
     const total = localTotal + externalTotal;
 
     res.json({
       success: true,
       data: {
-        jobs: paginatedJobs,
+        jobs: combinedJobs,
         pagination: {
           page: requestedPage,
           limit: requestedLimit,

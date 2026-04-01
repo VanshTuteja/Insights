@@ -39,7 +39,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
           <div className="flex justify-between items-start">
             <div className="space-y-2 flex-1 min-w-0 pr-2">
               <CardTitle className="text-lg font-semibold line-clamp-1">{job.title}</CardTitle>
-              <CardDescription className="text-base font-medium text-primary truncate">
+              <CardDescription className="text-base font-medium text-primary line-clamp-2 break-words leading-snug min-h-[2.75rem]">
                 {job.company}
               </CardDescription>
             </div>
@@ -61,16 +61,16 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
             </motion.button>
           </div>
           
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <div className="flex items-center space-x-1">
+          <div className="grid grid-cols-1 gap-1 text-xs text-muted-foreground sm:grid-cols-3 sm:gap-x-3">
+            <div className="flex min-w-0 items-center space-x-1">
               <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
               <span className="truncate">{job.location}</span>
             </div>
-            <div className="flex items-center space-x-1">
+            <div className="flex min-w-0 items-center space-x-1">
               <IndianRupee className="h-3.5 w-3.5 flex-shrink-0" />
               <span className="truncate">{formatSalaryDisplay(job.salary)}</span>
             </div>
-            <div className="flex items-center space-x-1">
+            <div className="flex min-w-0 items-center space-x-1">
               <Clock className="h-3.5 w-3.5 flex-shrink-0" />
               <span className="truncate">{job.postedTime}</span>
             </div>
@@ -78,7 +78,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
         </CardHeader>
 
         <CardContent className="space-y-4 flex-1 flex flex-col">
-          <p className="text-sm text-muted-foreground line-clamp-2">{job.description}</p>
+          <p className="text-sm text-muted-foreground line-clamp-3 break-words">{job.description}</p>
           
           <div className="flex flex-wrap gap-2">
             {job.tags.slice(0, 3).map((tag, index) => (
@@ -88,7 +88,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onSave, onApply, onViewDetails, 
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.1 }}
               >
-                <Badge variant="secondary" className="text-xs truncate max-w-[120px]">
+                <Badge variant="secondary" className="max-w-full text-xs whitespace-normal break-words">
                   {tag}
                 </Badge>
               </motion.div>
