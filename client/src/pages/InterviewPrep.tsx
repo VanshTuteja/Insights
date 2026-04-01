@@ -119,6 +119,7 @@ export default function InterviewPrep() {
   const [error, setError] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
+  const [questionVoiceMode, setQuestionVoiceMode] = useState<'cloud' | 'browser' | 'none'>('none');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -154,8 +155,24 @@ export default function InterviewPrep() {
     setIsListening(false);
   }, []);
 
-  const speakQuestion = useCallback(async (audioUrl?: string) => {
-    if (!audioUrl) return;
+  const speakQuestion = useCallback(async (audioUrl?: string, questionText?: string) => {
+    window.speechSynthesis?.cancel();
+
+    if (!audioUrl && questionText && 'speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(questionText);
+      utterance.lang = 'en-US';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+      setQuestionVoiceMode('browser');
+      return;
+    }
+
+    if (!audioUrl) {
+      setQuestionVoiceMode('none');
+      return;
+    }
+
     if (!audioRef.current) {
       audioRef.current = new Audio();
     }
@@ -163,8 +180,10 @@ export default function InterviewPrep() {
     audioRef.current.src = audioUrl;
     try {
       await audioRef.current.play();
+      setQuestionVoiceMode('cloud');
     } catch {
       setError('Question audio could not autoplay. Use the browser play controls or interact with the page first.');
+      setQuestionVoiceMode('none');
     }
   }, []);
 
@@ -183,6 +202,7 @@ export default function InterviewPrep() {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       recognitionRef.current?.stop();
       audioRef.current?.pause();
+      window.speechSynthesis?.cancel();
     };
   }, [loadHistory]);
 
@@ -257,7 +277,7 @@ export default function InterviewPrep() {
       setQuestionIndex(data.currentQuestionIndex);
       setCurrentQuestion(normalizedQuestion);
       setQuestions([normalizedQuestion]);
-      await speakQuestion(normalizedQuestion.audioUrl);
+      await speakQuestion(normalizedQuestion.audioUrl, normalizedQuestion.question);
     } catch (err: any) {
       setError(err.message || 'Failed to start the interview.');
     } finally {
@@ -355,7 +375,7 @@ export default function InterviewPrep() {
       setTranscript('');
       setLiveTranscript('');
       setLastEvaluation(null);
-      await speakQuestion(normalizedQuestion.audioUrl);
+      await speakQuestion(normalizedQuestion.audioUrl, normalizedQuestion.question);
     } catch (err: any) {
       setError(err.message || 'Failed to load the next question.');
     } finally {
@@ -366,6 +386,7 @@ export default function InterviewPrep() {
   const resetSession = useCallback(() => {
     stopListening();
     audioRef.current?.pause();
+    window.speechSynthesis?.cancel();
     setSessionId(null);
     setInterviewState('idle');
     setCurrentQuestion(null);
@@ -376,6 +397,7 @@ export default function InterviewPrep() {
     setLastEvaluation(null);
     setReport(null);
     setError(null);
+    setQuestionVoiceMode('none');
   }, [stopListening]);
 
   const latestSession = history[0];
@@ -571,7 +593,13 @@ export default function InterviewPrep() {
                         </div>
                         <div>
                           <p className="font-semibold text-foreground">AI Interviewer</p>
-                          <p className="text-sm text-muted-foreground">Google Cloud TTS voice with Groq-generated interview questions</p>
+                          <p className="text-sm text-muted-foreground">
+                            {questionVoiceMode === 'cloud'
+                              ? 'Google Cloud TTS voice with Groq-generated interview questions'
+                              : questionVoiceMode === 'browser'
+                                ? 'Browser voice fallback with Groq-generated interview questions'
+                                : 'Groq-generated interview questions with voice fallback'}
+                          </p>
                         </div>
                       </div>
                       <div className="mb-4 flex h-20 items-end gap-2">
@@ -584,9 +612,11 @@ export default function InterviewPrep() {
                         ))}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {currentQuestion?.audioUrl
+                        {questionVoiceMode === 'cloud'
                           ? 'Question audio is ready for this round.'
-                          : 'Question audio is currently unavailable, but the text question is ready.'}
+                          : questionVoiceMode === 'browser'
+                            ? 'Question audio is being spoken using your browser voice.'
+                            : 'Question audio is currently unavailable, but the text question is ready.'}
                       </p>
                     </div>
                   </div>

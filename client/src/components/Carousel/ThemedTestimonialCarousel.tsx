@@ -51,7 +51,7 @@ const TestimonialCarousel: React.FC = () => {
     company: 'Infosys',
     content: 'This platform made my job search so much easier. The AI recommendations were surprisingly accurate and saved me a lot of time.',
     rating: 5,
-    avatar: 'https://randomuser.me/api/portraits/men/32.jpg'
+    avatar: undefined
   },
   {
     id: '2',
@@ -60,7 +60,7 @@ const TestimonialCarousel: React.FC = () => {
     company: 'Zomato',
     content: 'Loved the resume builder! It gave real-time suggestions that actually improved my chances of getting shortlisted.',
     rating: 5,
-    avatar: 'https://randomuser.me/api/portraits/women/44.jpg'
+    avatar: undefined
   },
   {
     id: '3',
@@ -69,7 +69,7 @@ const TestimonialCarousel: React.FC = () => {
     company: 'TCS',
     content: 'The mock interview feature is amazing. It helped me gain confidence before my actual interviews.',
     rating: 5,
-    avatar: 'https://randomuser.me/api/portraits/men/65.jpg'
+    avatar: undefined
   },
   {
     id: '4',
@@ -78,7 +78,7 @@ const TestimonialCarousel: React.FC = () => {
     company: 'Freshworks',
     content: 'Clean UI and very easy to use. I especially liked the career insights—it helped me understand salary trends better.',
     rating: 5,
-    avatar: 'https://randomuser.me/api/portraits/women/68.jpg'
+    avatar: undefined
   },
   {
     id: '5',
@@ -87,7 +87,7 @@ const TestimonialCarousel: React.FC = () => {
     company: 'Wipro',
     content: 'One of the best platforms for freshers and professionals. It really helped me land better opportunities.',
     rating: 5,
-    avatar: 'https://randomuser.me/api/portraits/men/75.jpg'
+    avatar: undefined
   }
 ];
 
@@ -228,7 +228,7 @@ const TestimonialCarousel: React.FC = () => {
                            {/* Author Info */}
                           <div className="flex items-center space-x-3 mt-auto">
                             <img
-                              src={testimonial.avatar}
+                              src={testimonial.avatar || createAvatarDataUri(testimonial.name, themePreview.primary)}
                               alt={testimonial.name}
                               className="h-12 w-12 rounded-full border-2"
                               style={{ borderColor: darkTheme ? 'rgba(255,255,255,0.2)' : hexToRgba(themePreview.primary, 0.16) }}
