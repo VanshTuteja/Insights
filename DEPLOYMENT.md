@@ -39,8 +39,8 @@ GROQ_MODEL=llama-3.1-8b-instant
 GOOGLE_TTS_LANGUAGE=hi-IN
 GOOGLE_TTS_VOICE=hi-IN-Wavenet-A
 WHISPER_SERVICE_URL=https://your-whisper-service.onrender.com
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=change_me
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
 ```
 
 ### Frontend (`client/.env`)

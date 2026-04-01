@@ -97,8 +97,8 @@ GROQ_MODEL=llama-3.1-8b-instant
 WHISPER_SERVICE_URL=https://your-whisper-service-domain.com
 
 # Admin seed credentials
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=change_me
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
 ```
 
 ### Frontend (client/.env)
