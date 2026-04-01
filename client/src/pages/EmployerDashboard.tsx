@@ -38,7 +38,7 @@ import { toast } from '@/hooks/use-toast';
 import axios from 'axios';
 import { useAuthStore } from '@/stores/authStore';
 import { useJobStore } from '@/stores/jobStore';
-import { cn } from '@/lib/utils';
+import { cn, resolveAssetUrl } from '@/lib/utils';
 import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -125,9 +125,6 @@ const EmployerDashboard: React.FC = () => {
 
       if (appsRes.status === 'fulfilled') {
         const items = appsRes.value.data?.data || [];
-        const API_BASE_URL ='https://job-finder-4cem.onrender.com/api';
-        const fileBase = API_BASE_URL.replace(/\/api\/?$/, '');
-
           const mapped = items.map((item: any) => {
             const candidate = item.candidate;
             const cId = candidate?._id ?? candidate?.id;
@@ -138,8 +135,7 @@ const EmployerDashboard: React.FC = () => {
             const skills: string[] = Array.isArray(candidate?.skills) ? candidate.skills : [];
             const resumePath: string | undefined =
               candidate?.resumeUrl || item.resume || undefined;
-            const resumeUrl =
-              resumePath && (resumePath.startsWith('http') ? resumePath : `${fileBase}${resumePath}`);
+            const resumeUrl = resolveAssetUrl(resumePath);
 
             const match = Math.min(100, 60 + skills.length * 5);
 
@@ -300,9 +296,6 @@ const EmployerDashboard: React.FC = () => {
     try {
       const response = await axios.get(`/applications/job/${job.id || job._id}`);
       const items = response.data?.data || [];
-      const API_BASE_URL ='https://job-finder-4cem.onrender.com/api';
-      const fileBase = API_BASE_URL.replace(/\/api\/?$/, '');
-
       const mapped = items.map((item: any) => {
         const candidate = item.candidate || {};
         const resumePath = candidate.resumeUrl || item.resume || '';
@@ -324,7 +317,7 @@ const EmployerDashboard: React.FC = () => {
           avatar: candidate.avatar,
           jobId: job.id || job._id,
           status: item.status,
-          resumeUrl: resumePath ? (resumePath.startsWith('http') ? resumePath : `${fileBase}${resumePath}`) : undefined,
+          resumeUrl: resolveAssetUrl(resumePath),
         };
       });
 

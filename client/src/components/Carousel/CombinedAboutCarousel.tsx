@@ -107,9 +107,8 @@ const CombinedAboutCarousel = () => {
     }
   ];
 
-  // Create extended arrays for seamless looping
-  const extendedSteps = [...howItWorks, ...howItWorks, ...howItWorks];
-  const extendedBenefits = [...benefits, ...benefits, ...benefits];
+  const stepsLoop = [...howItWorks, ...howItWorks];
+  const benefitsLoop = [...benefits, ...benefits];
   const primaryGlow = mixHex(themePreview.primary, '#ffffff', darkTheme ? 0.05 : 0.18);
   const secondaryGlow = mixHex(themePreview.secondary, '#38bdf8', darkTheme ? 0.16 : 0.3);
 
@@ -122,6 +121,44 @@ const CombinedAboutCarousel = () => {
           : `linear-gradient(180deg, ${hexToRgba(themePreview.primary, 0.04)} 0%, ${hexToRgba(themePreview.secondary, 0.12)} 100%)`,
       }}
     >
+      <style>
+        {`
+          .about-marquee {
+            overflow: hidden;
+          }
+
+          .about-marquee-track {
+            display: flex;
+            width: max-content;
+            will-change: transform;
+            transform: translate3d(0, 0, 0);
+            backface-visibility: hidden;
+          }
+
+          .about-marquee-left {
+            animation: about-marquee-left 34s linear infinite;
+          }
+
+          .about-marquee-right {
+            animation: about-marquee-right 30s linear infinite;
+          }
+
+          .about-marquee-card {
+            transform: translate3d(0, 0, 0);
+            will-change: transform;
+          }
+
+          @keyframes about-marquee-left {
+            from { transform: translate3d(0, 0, 0); }
+            to { transform: translate3d(-50%, 0, 0); }
+          }
+
+          @keyframes about-marquee-right {
+            from { transform: translate3d(-50%, 0, 0); }
+            to { transform: translate3d(0, 0, 0); }
+          }
+        `}
+      </style>
       {/* How It Works Section */}
       <section className="mb-20">
         <div className="container mx-auto px-4">
@@ -145,30 +182,17 @@ const CombinedAboutCarousel = () => {
 
           {/* How It Works Carousel - Moving Left to Right */}
           <div className="relative -mx-4 md:-mx-6 lg:-mx-8 xl:-mx-12 2xl:-mx-24">
-            <div className="overflow-hidden">
+            <div className="about-marquee">
               {/* Gradient overlays */}
               <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-background via-background/80 to-transparent z-10" />
               <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background via-background/80 to-transparent z-10" />
 
-              <motion.div
-                className="flex gap-6 w-max pl-8"
-                animate={{
-                  x: [0, -2400],
-                }}
-                transition={{
-                  x: {
-                    repeat: Infinity,
-                    repeatType: "loop",
-                    duration: 40,
-                    ease: "linear",
-                  },
-                }}
-              >
-                {extendedSteps.map((step, index) => (
-                  <motion.div
+              <div className="about-marquee-track about-marquee-left gap-6 pl-8 pr-8">
+                {stepsLoop.map((step, index) => (
+                  <div
                     key={`step-${index}`}
                     className={cn(
-                      'group h-36 w-72 flex-shrink-0 rounded-xl border p-5 shadow-lg backdrop-blur-sm transition-all duration-300 hover:shadow-xl',
+                      'about-marquee-card group h-36 w-72 flex-shrink-0 rounded-xl border p-5 shadow-lg backdrop-blur-sm transition-transform duration-300 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-xl',
                       darkTheme ? 'text-white' : 'text-foreground',
                     )}
                     style={{
@@ -176,22 +200,6 @@ const CombinedAboutCarousel = () => {
                         ? `linear-gradient(145deg, ${hexToRgba(primaryGlow, 0.18)} 0%, ${hexToRgba(themePreview.secondary, 0.82)} 100%)`
                         : `linear-gradient(145deg, ${hexToRgba(themePreview.primary, 0.12)} 0%, ${hexToRgba('#ffffff', 0.94)} 100%)`,
                       borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.24) : hexToRgba(themePreview.primary, 0.16),
-                    }}
-                    whileHover={{
-                      scale: 1.05,
-                      y: -8,
-                    }}
-                    animate={{
-                      y: [0, -6, 0],
-                    }}
-                    transition={{
-                      y: {
-                        repeat: Infinity,
-                        repeatType: "reverse",
-                        duration: 4 + (index % 3),
-                        delay: index * 0.1,
-                        ease: "easeInOut",
-                      },
                     }}
                   >
                     <div className="flex items-start space-x-4">
@@ -227,9 +235,9 @@ const CombinedAboutCarousel = () => {
                         </p>
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
-              </motion.div>
+              </div>
             </div>
           </div>
         </div>
@@ -258,30 +266,17 @@ const CombinedAboutCarousel = () => {
 
           {/* Benefits Carousel - Moving Right to Left */}
           <div className="relative -mx-4 md:-mx-6 lg:-mx-8 xl:-mx-12 2xl:-mx-24">
-            <div className="overflow-hidden">
+            <div className="about-marquee">
               {/* Gradient overlays */}
               <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-background via-background/80 to-transparent z-10" />
               <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-background via-background/80 to-transparent z-10" />
 
-              <motion.div
-                className="flex gap-6 w-max pr-8"
-                animate={{
-                  x: [-2400, 0],
-                }}
-                transition={{
-                  x: {
-                    repeat: Infinity,
-                    repeatType: "loop",
-                    duration: 35,
-                    ease: "linear",
-                  },
-                }}
-              >
-                {extendedBenefits.map((benefit, index) => (
-                  <motion.div
+              <div className="about-marquee-track about-marquee-right gap-6 pl-8 pr-8">
+                {benefitsLoop.map((benefit, index) => (
+                  <div
                     key={`benefit-${index}`}
                     className={cn(
-                      'group h-36 w-72 flex-shrink-0 rounded-xl border p-5 shadow-lg backdrop-blur-sm transition-all duration-300 hover:shadow-xl',
+                      'about-marquee-card group h-36 w-72 flex-shrink-0 rounded-xl border p-5 shadow-lg backdrop-blur-sm transition-transform duration-300 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-xl',
                       darkTheme ? 'text-white' : 'text-foreground',
                     )}
                     style={{
@@ -290,24 +285,8 @@ const CombinedAboutCarousel = () => {
                         : `linear-gradient(145deg, ${hexToRgba(mixHex(themePreview.primary, themePreview.secondary, 0.5), 0.1)} 0%, ${hexToRgba('#ffffff', 0.96)} 100%)`,
                       borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.2) : hexToRgba(themePreview.primary, 0.14),
                     }}
-                    whileHover={{
-                      scale: 1.05,
-                      y: -8,
-                    }}
-                    animate={{
-                      y: [0, 6, 0],
-                    }}
-                    transition={{
-                      y: {
-                        repeat: Infinity,
-                        repeatType: "reverse",
-                        duration: 3.5 + (index % 4),
-                        delay: index * 0.15,
-                        ease: "easeInOut",
-                      },
-                    }}
-                    >
-                      <div className="flex items-start space-x-4">
+                  >
+                    <div className="flex items-start space-x-4">
                       <div
                         className="flex h-14 w-14 items-center justify-center rounded-full"
                         style={{
@@ -325,9 +304,9 @@ const CombinedAboutCarousel = () => {
                         </p>
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
-              </motion.div>
+              </div>
             </div>
           </div>
         </div>

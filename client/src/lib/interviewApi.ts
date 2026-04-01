@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE ='https://job-finder-4cem.onrender.com/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export type InterviewState = 'idle' | 'asking' | 'listening' | 'processing' | 'feedback' | 'completed';
 

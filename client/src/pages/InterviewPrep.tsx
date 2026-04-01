@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { interviewApi, type AnswerEvaluation, type CompleteInterviewResponse, type InterviewHistoryItem, type InterviewQuestion, type InterviewState } from '@/lib/interviewApi';
 import { useAuthStore } from '@/stores/authStore';
@@ -97,6 +98,11 @@ function normalizeQuestionItem(question: InterviewQuestion): InterviewQuestion {
   };
 }
 
+function isLikelyMobileDevice() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(max-width: 768px)').matches || /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
 export default function InterviewPrep() {
   const { user } = useAuthStore();
   const theme = useThemeStore((state) => state.theme);
@@ -120,13 +126,20 @@ export default function InterviewPrep() {
   const [isListening, setIsListening] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
   const [questionVoiceMode, setQuestionVoiceMode] = useState<'cloud' | 'browser' | 'none'>('none');
+  const [manualAnswer, setManualAnswer] = useState('');
+  const [mediaStatus, setMediaStatus] = useState<'idle' | 'ready' | 'partial' | 'unsupported'>('idle');
+  const [requiresManualAudioPlay, setRequiresManualAudioPlay] = useState(false);
+  const [playbackHint, setPlaybackHint] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const pendingQuestionAudioRef = useRef<{ audioUrl?: string; questionText?: string } | null>(null);
 
   const resolvedRole = selectedRole === 'Other' ? customRole.trim() : selectedRole;
+  const mobileDevice = useMemo(() => isLikelyMobileDevice(), []);
+  const speechRecognitionSupported = useMemo(() => Boolean(window.SpeechRecognition || window.webkitSpeechRecognition), []);
 
   const pageShellStyle = {
     backgroundImage: darkTheme
@@ -144,20 +157,54 @@ export default function InterviewPrep() {
       return;
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    streamRef.current = stream;
-    setMediaReady(true);
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play().catch(() => undefined);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMediaStatus('unsupported');
+      setMediaReady(false);
+      return;
     }
-  }, []);
+
+    const constraintOptions: MediaStreamConstraints[] = [
+      {
+        video: mobileDevice ? { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } : true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      },
+      { video: mobileDevice ? { facingMode: 'user' } : true, audio: false },
+      { video: false, audio: true },
+    ];
+
+    for (let index = 0; index < constraintOptions.length; index += 1) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraintOptions[index]);
+        streamRef.current = stream;
+        const hasVideoTrack = stream.getVideoTracks().length > 0;
+        setMediaReady(hasVideoTrack);
+        setMediaStatus(index === 0 ? 'ready' : 'partial');
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = hasVideoTrack ? stream : null;
+          if (hasVideoTrack) {
+            await videoRef.current.play().catch(() => undefined);
+          }
+        }
+        return;
+      } catch {
+        // Try a lighter set of constraints before failing completely.
+      }
+    }
+
+    setMediaReady(false);
+    setMediaStatus('unsupported');
+  }, [mobileDevice]);
 
   const shutdownMedia = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setMediaReady(false);
+    setMediaStatus('idle');
 
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -171,15 +218,25 @@ export default function InterviewPrep() {
 
   const speakQuestion = useCallback(async (audioUrl?: string, questionText?: string) => {
     window.speechSynthesis?.cancel();
+    pendingQuestionAudioRef.current = { audioUrl, questionText };
+    setRequiresManualAudioPlay(false);
+    setPlaybackHint(null);
 
     if (!audioUrl && questionText && 'speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(questionText);
       utterance.lang = 'en-US';
       utterance.rate = 1;
       utterance.pitch = 1;
-      window.speechSynthesis.speak(utterance);
-      setQuestionVoiceMode('browser');
-      return;
+      try {
+        window.speechSynthesis.speak(utterance);
+        setQuestionVoiceMode('browser');
+        return;
+      } catch {
+        setRequiresManualAudioPlay(true);
+        setPlaybackHint('Tap "Play question audio" to hear the prompt on mobile.');
+        setQuestionVoiceMode('browser');
+        return;
+      }
     }
 
     if (!audioUrl) {
@@ -192,12 +249,45 @@ export default function InterviewPrep() {
     }
 
     audioRef.current.src = audioUrl;
+    audioRef.current.setAttribute('playsinline', 'true');
     try {
       await audioRef.current.play();
       setQuestionVoiceMode('cloud');
     } catch {
-      setError('Question audio could not autoplay. Use the browser play controls or interact with the page first.');
-      setQuestionVoiceMode('none');
+      setRequiresManualAudioPlay(true);
+      setPlaybackHint('Question audio is ready. Tap "Play question audio" because mobile browsers block autoplay.');
+      setQuestionVoiceMode('cloud');
+    }
+  }, []);
+
+  const handlePlayQuestionAudio = useCallback(async () => {
+    const pending = pendingQuestionAudioRef.current;
+    if (!pending) return;
+
+    setPlaybackHint(null);
+    if (pending.audioUrl) {
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+      }
+      audioRef.current.src = pending.audioUrl;
+      audioRef.current.setAttribute('playsinline', 'true');
+      try {
+        await audioRef.current.play();
+        setRequiresManualAudioPlay(false);
+        setQuestionVoiceMode('cloud');
+        return;
+      } catch (err: any) {
+        setError(err?.message || 'Audio playback is blocked on this browser. You can still read the text question.');
+      }
+    }
+
+    if (pending.questionText && 'speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(pending.questionText);
+      utterance.lang = 'en-US';
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+      setRequiresManualAudioPlay(false);
+      setQuestionVoiceMode('browser');
     }
   }, []);
 
@@ -255,9 +345,13 @@ export default function InterviewPrep() {
     };
 
     recognition.onerror = (event) => {
-      setError(event.error === 'not-allowed'
-        ? 'Microphone permission is blocked. Please allow mic access and try again.'
-        : 'Speech recognition stopped unexpectedly.');
+      setError(
+        event.error === 'not-allowed'
+          ? 'Microphone permission is blocked. Please allow mic access or type your answer manually.'
+          : event.error === 'service-not-allowed'
+            ? 'Speech recognition is unavailable on this mobile browser. Use the typed answer box instead.'
+            : 'Speech recognition stopped unexpectedly. You can still submit a typed answer.'
+      );
       setIsListening(false);
     };
 
@@ -281,9 +375,14 @@ export default function InterviewPrep() {
     setLastEvaluation(null);
     setTranscript('');
     setLiveTranscript('');
+    setManualAnswer('');
+    setPlaybackHint(null);
 
     try {
-      await setupMedia();
+      await setupMedia().catch(() => undefined);
+      if (!speechRecognitionSupported) {
+        setError('Live speech recognition is limited on this browser. The interview still works, and you can type your answer if needed.');
+      }
       const data = await interviewApi.start(resolvedRole);
       const normalizedQuestion = normalizeQuestionItem(data.question);
       setSessionId(data.sessionId);
@@ -297,13 +396,22 @@ export default function InterviewPrep() {
     } finally {
       setLoading(false);
     }
-  }, [resolvedRole, setupMedia, speakQuestion]);
+  }, [resolvedRole, setupMedia, speakQuestion, speechRecognitionSupported]);
 
   const startListening = useCallback(() => {
+    if (!speechRecognitionSupported) {
+      setInterviewState('listening');
+      setError('Speech recognition is not available on this mobile browser. Please type your answer below and submit it.');
+      return;
+    }
     try {
       const recognition = ensureRecognition();
+      if (!streamRef.current) {
+        void setupMedia().catch(() => undefined);
+      }
       setTranscript('');
       setLiveTranscript('');
+      setManualAnswer('');
       setLastEvaluation(null);
       setInterviewState('listening');
       setError(null);
@@ -312,13 +420,13 @@ export default function InterviewPrep() {
     } catch (err: any) {
       setError(err.message || 'Unable to start speech recognition.');
     }
-  }, [ensureRecognition]);
+  }, [ensureRecognition, setupMedia, speechRecognitionSupported]);
 
   const submitAnswer = useCallback(async () => {
     if (!sessionId) return;
-    const answerText = `${transcript} ${liveTranscript}`.trim();
+    const answerText = manualAnswer.trim() || `${transcript} ${liveTranscript}`.trim();
     if (!answerText) {
-      setError('No answer was transcribed. Please speak and try again.');
+      setError('No answer was captured yet. Speak or type your answer, then submit.');
       return;
     }
 
@@ -353,7 +461,7 @@ export default function InterviewPrep() {
     } finally {
       setLoading(false);
     }
-  }, [liveTranscript, sessionId, stopListening, transcript]);
+  }, [liveTranscript, manualAnswer, sessionId, stopListening, transcript]);
 
   const moveNext = useCallback(async () => {
     if (!sessionId) return;
@@ -392,6 +500,7 @@ export default function InterviewPrep() {
       setQuestions((current) => [...current, normalizedQuestion]);
       setTranscript('');
       setLiveTranscript('');
+      setManualAnswer('');
       setLastEvaluation(null);
       await speakQuestion(normalizedQuestion.audioUrl, normalizedQuestion.question);
     } catch (err: any) {
@@ -413,14 +522,18 @@ export default function InterviewPrep() {
     setQuestions([]);
     setTranscript('');
     setLiveTranscript('');
+    setManualAnswer('');
     setLastEvaluation(null);
     setReport(null);
     setError(null);
     setQuestionVoiceMode('none');
+    setRequiresManualAudioPlay(false);
+    setPlaybackHint(null);
   }, [shutdownMedia, stopListening]);
 
   const latestSession = history[0];
   const averageConfidence = getAverageConfidence(questions);
+  const canSubmitAnswer = Boolean(sessionId) && !loading && Boolean(manualAnswer.trim() || transcript.trim() || liveTranscript.trim());
 
   if (!user) {
     return (
@@ -438,11 +551,11 @@ export default function InterviewPrep() {
   }
 
   return (
-    <div className="space-y-6" style={pageShellStyle}>
+    <div className="space-y-5 overflow-x-hidden sm:space-y-6" style={pageShellStyle}>
       <AnimatedSection>
         <div
           className={cn(
-            'rounded-3xl border px-6 py-8 shadow-xl',
+            'rounded-3xl border px-4 py-6 shadow-xl sm:px-6 sm:py-8',
             darkTheme
               ? 'border-primary/20 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--card)/0.86)_100%)] text-foreground'
               : 'border-primary/10 bg-[linear-gradient(135deg,hsl(var(--card))_0%,hsl(var(--muted)/0.72)_100%)] text-foreground'
@@ -451,7 +564,7 @@ export default function InterviewPrep() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-3">
               <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Interview Studio</p>
-              <h1 className="text-3xl font-semibold">AI Mock Interview System</h1>
+              <h1 className="text-2xl font-semibold sm:text-3xl">AI Mock Interview System</h1>
               <p className="max-w-2xl text-sm text-muted-foreground">
                 Practice spoken interview rounds with verbal-only questions, live speech-to-text, AI voice playback, and a chart-based final report.
               </p>
@@ -487,7 +600,7 @@ export default function InterviewPrep() {
       {report ? (
         <InterviewReport role={report.role} report={report.report} questions={report.questions} onRestart={resetSession} />
       ) : (
-        <div className="grid gap-6 2xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="grid gap-5 2xl:grid-cols-[360px_minmax(0,1fr)]">
           <AnimatedSection delay={0.15}>
             <Card className={cardClass}>
               <CardHeader>
@@ -545,6 +658,18 @@ export default function InterviewPrep() {
                   <p className="text-muted-foreground">4. Download a PDF report with charts after the round.</p>
                 </div>
 
+                <div className={cn('rounded-2xl border p-4 text-sm', darkTheme ? 'border-border/60 bg-background/55' : 'border-border bg-slate-50')}>
+                  <p className="font-medium text-foreground">Mobile support</p>
+                  <p className="mt-2 text-muted-foreground">
+                    {speechRecognitionSupported
+                      ? 'Tap Start Interview, then tap Start Answer when you are ready to speak. If your browser blocks voice capture, type your answer below.'
+                      : 'This mobile browser has limited speech recognition. You can still run the interview and submit typed answers.'}
+                  </p>
+                  <p className="mt-2 text-muted-foreground">
+                    Media status: {mediaStatus === 'ready' ? 'camera and mic ready' : mediaStatus === 'partial' ? 'partial access granted' : mediaStatus === 'unsupported' ? 'camera preview unavailable' : 'waiting for permission'}
+                  </p>
+                </div>
+
                 <Button className="w-full" onClick={() => void startInterview()} disabled={loading || Boolean(sessionId)}>
                   {loading && !sessionId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                   Start interview
@@ -578,22 +703,22 @@ export default function InterviewPrep() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className={cn('rounded-2xl border p-5 text-lg leading-relaxed', darkTheme ? 'border-primary/10 bg-background/50' : 'border-border bg-slate-50')}>
+                <div className={cn('rounded-2xl border p-4 text-base leading-relaxed sm:p-5 sm:text-lg', darkTheme ? 'border-primary/10 bg-background/50' : 'border-border bg-slate-50')}>
                   {currentQuestion?.question || 'Your AI interviewer question will appear here.'}
                 </div>
               </CardContent>
             </Card>
 
-            <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.2fr)_360px]">
+            <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.2fr)_360px]">
               <Card className={cardClass}>
                 <CardHeader>
                   <CardTitle>Live interview room</CardTitle>
-                  <CardDescription>Camera on the left, AI interviewer on the right, transcript below.</CardDescription>
+                  <CardDescription>Optimized for touch devices, mobile permissions, and manual playback when browsers block autoplay.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 xl:grid-cols-2">
                     <div className="relative overflow-hidden rounded-2xl border bg-slate-950">
-                      <video ref={videoRef} autoPlay muted playsInline className="h-[260px] w-full object-cover sm:h-[320px]" />
+                      <video ref={videoRef} autoPlay muted playsInline className="h-[220px] w-full object-cover sm:h-[320px]" />
                       {!mediaReady ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-muted">
                           <VideoOff className="h-12 w-12 text-muted-foreground" />
@@ -637,6 +762,21 @@ export default function InterviewPrep() {
                             ? 'Question audio is being spoken using your browser voice.'
                             : 'Question audio is currently unavailable, but the text question is ready.'}
                       </p>
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full sm:w-auto"
+                          onClick={() => void handlePlayQuestionAudio()}
+                          disabled={!currentQuestion}
+                        >
+                          <Play className="mr-2 h-4 w-4" />
+                          Play question audio
+                        </Button>
+                        {requiresManualAudioPlay ? (
+                          <p className="text-xs leading-5 text-muted-foreground">{playbackHint || 'Tap to hear the question on mobile.'}</p>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 
@@ -652,6 +792,19 @@ export default function InterviewPrep() {
                     </p>
                   </div>
 
+                  <div className={cn('rounded-2xl border p-4', darkTheme ? 'border-border/60 bg-background/55' : 'border-border bg-slate-50')}>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm font-medium text-foreground">Typed answer fallback</p>
+                      <span className="text-xs text-muted-foreground">Useful on Safari iPhone and restricted mobile browsers</span>
+                    </div>
+                    <Textarea
+                      value={manualAnswer}
+                      onChange={(event) => setManualAnswer(event.target.value)}
+                      placeholder="If your mobile browser blocks speech recognition, type your answer here and submit it."
+                      className="mt-3 min-h-28 resize-y"
+                    />
+                  </div>
+
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                     <Button className="w-full" onClick={startListening} disabled={!sessionId || isListening || loading || interviewState === 'completed'}>
                       <Mic className="mr-2 h-4 w-4" />
@@ -661,7 +814,7 @@ export default function InterviewPrep() {
                       <MicOff className="mr-2 h-4 w-4" />
                       Stop capture
                     </Button>
-                    <Button className="w-full" onClick={() => void submitAnswer()} disabled={!sessionId || loading || (!transcript.trim() && !liveTranscript.trim())}>
+                    <Button className="w-full" onClick={() => void submitAnswer()} disabled={!canSubmitAnswer}>
                       {loading && interviewState === 'processing' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
                       Submit answer
                     </Button>
