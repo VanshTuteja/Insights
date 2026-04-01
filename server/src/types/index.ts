@@ -173,6 +173,7 @@ export interface UpdateProfileRequest {
   name?: string;
   email?: string;
   role?: IUser['role'];
+  avatar?: string;
   phone?: string;
   location?: string;
   bio?: string;

@@ -64,6 +64,12 @@ const ensureUploadsDir = async () => {
 
 const sanitizeName = (value: string) => value.replace(/[^a-z0-9._-]/gi, '_').toLowerCase();
 
+const saveAvatarInline = (file: Express.Multer.File) => {
+  const mimeType = file.mimetype || 'image/png';
+  const base64 = file.buffer.toString('base64');
+  return `data:${mimeType};base64,${base64}`;
+};
+
 const saveBufferLocally = async (
   file: Express.Multer.File,
   prefix: 'resume' | 'avatar',
@@ -144,7 +150,7 @@ router.post(
               transformation: [{ width: 512, height: 512, crop: 'fill', gravity: 'face' }],
             })
           ).secure_url
-        : await saveBufferLocally(req.file, 'avatar', userId);
+        : saveAvatarInline(req.file);
 
       const user = await User.findByIdAndUpdate(
         userId,
