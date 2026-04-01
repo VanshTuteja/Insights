@@ -22,6 +22,7 @@ import { startInterviewReminderService } from './services/interviewReminderServi
 const app = express();
 
 const DIRNAME = path.resolve();
+const allowedOrigins = new Set(config.cors.origins);
 
 // Render and similar platforms terminate TLS and forward the real client IP.
 // Trust the first proxy so rate limiting and req.ip work correctly.
@@ -35,9 +36,25 @@ app.use(cookieParser());
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: config.cors.origin,
-  credentials: true
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.size === 0 || allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    logger.warn('Blocked by CORS policy', { origin, allowedOrigins: [...allowedOrigins] });
+    callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+app.options('*', cors());
 
 // Rate limiting
 const limiter = rateLimit({

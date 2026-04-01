@@ -59,6 +59,10 @@ export const config = {
 
   cors: {
     origin: sanitizeEnvString(process.env.FRONTEND_URL),
+    origins: sanitizeEnvString(process.env.FRONTEND_URL)
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
   },
 
   rateLimit: {

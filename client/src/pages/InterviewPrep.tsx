@@ -140,6 +140,10 @@ export default function InterviewPrep() {
   );
 
   const setupMedia = useCallback(async () => {
+    if (streamRef.current) {
+      return;
+    }
+
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     streamRef.current = stream;
     setMediaReady(true);
@@ -147,6 +151,16 @@ export default function InterviewPrep() {
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
       await videoRef.current.play().catch(() => undefined);
+    }
+  }, []);
+
+  const shutdownMedia = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setMediaReady(false);
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
   }, []);
 
@@ -199,12 +213,12 @@ export default function InterviewPrep() {
   useEffect(() => {
     void loadHistory();
     return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      shutdownMedia();
       recognitionRef.current?.stop();
       audioRef.current?.pause();
       window.speechSynthesis?.cancel();
     };
-  }, [loadHistory]);
+  }, [loadHistory, shutdownMedia]);
 
   const ensureRecognition = useCallback(() => {
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -352,6 +366,10 @@ export default function InterviewPrep() {
           ...result,
           questions: result.questions.map(normalizeQuestionItem),
         });
+        stopListening();
+        audioRef.current?.pause();
+        window.speechSynthesis?.cancel();
+        shutdownMedia();
         setInterviewState('completed');
         await loadHistory();
       } catch (err: any) {
@@ -381,12 +399,13 @@ export default function InterviewPrep() {
     } finally {
       setLoading(false);
     }
-  }, [loadHistory, questions, sessionId, speakQuestion]);
+  }, [loadHistory, questions, sessionId, shutdownMedia, speakQuestion, stopListening]);
 
   const resetSession = useCallback(() => {
     stopListening();
     audioRef.current?.pause();
     window.speechSynthesis?.cancel();
+    shutdownMedia();
     setSessionId(null);
     setInterviewState('idle');
     setCurrentQuestion(null);
@@ -398,7 +417,7 @@ export default function InterviewPrep() {
     setReport(null);
     setError(null);
     setQuestionVoiceMode('none');
-  }, [stopListening]);
+  }, [shutdownMedia, stopListening]);
 
   const latestSession = history[0];
   const averageConfidence = getAverageConfidence(questions);
