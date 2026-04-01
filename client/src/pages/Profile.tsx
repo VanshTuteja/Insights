@@ -294,7 +294,15 @@ const Profile: React.FC = () => {
 
     setAvatarUploading(true);
     try {
-      const preparedAvatar = await prepareAvatarFile(file);
+      let preparedAvatar;
+      try {
+        preparedAvatar = await prepareAvatarFile(file);
+      } catch {
+        preparedAvatar = {
+          file,
+          previewUrl: URL.createObjectURL(file),
+        };
+      }
       const formData = new FormData();
       formData.append('avatar', preparedAvatar.file);
 

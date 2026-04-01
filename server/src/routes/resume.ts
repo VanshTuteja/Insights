@@ -28,7 +28,15 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024,
   },
   fileFilter: (_, file, cb) => {
-    if (file.mimetype !== 'application/pdf') {
+    const normalizedName = (file.originalname || '').toLowerCase();
+    const normalizedType = (file.mimetype || '').toLowerCase();
+    const isPdf =
+      normalizedName.endsWith('.pdf') ||
+      normalizedType === 'application/pdf' ||
+      normalizedType === 'application/x-pdf' ||
+      normalizedType === 'binary/octet-stream' ||
+      normalizedType === 'application/octet-stream';
+    if (!isPdf) {
       cb(new Error('Only PDF resumes are allowed'));
       return;
     }

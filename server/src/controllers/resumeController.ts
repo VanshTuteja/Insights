@@ -33,6 +33,69 @@ function compactText(value: string, limit = 6000) {
   return value.replace(/\u0000/g, '').replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
+function computeContentBasedAtsScore(
+  resumeText: string,
+  analysis: {
+    strengths?: string[];
+    weaknesses?: string[];
+    missing_keywords?: string[];
+    suggestions?: string[];
+  },
+) {
+  const normalized = resumeText.toLowerCase();
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  const sectionPatterns = [
+    /\b(summary|profile|objective)\b/,
+    /\b(experience|work experience|employment)\b/,
+    /\b(skills|technical skills|core skills)\b/,
+    /\b(education|academic)\b/,
+    /\b(projects|project)\b/,
+  ];
+  const sectionHits = sectionPatterns.filter((pattern) => pattern.test(normalized)).length;
+  const quantifiedBullets = (resumeText.match(/\b\d+[%x+]?\b/g) || []).length;
+  const actionVerbHits = (
+    normalized.match(/\b(led|built|developed|designed|implemented|improved|managed|created|delivered|optimized|launched|analyzed|automated)\b/g) || []
+  ).length;
+  const keywordCoverage = Math.max(0, 15 - (analysis.missing_keywords?.length || 0) * 3);
+  const strengthsBonus = Math.min(18, (analysis.strengths?.length || 0) * 3);
+  const weaknessPenalty = Math.min(18, (analysis.weaknesses?.length || 0) * 4);
+  const suggestionsPenalty = Math.min(10, (analysis.suggestions?.length || 0) * 1.5);
+
+  const structureScore = sectionHits * 8;
+  const lengthScore = wordCount >= 250 ? 12 : wordCount >= 150 ? 8 : wordCount >= 80 ? 4 : 0;
+  const impactScore = Math.min(16, quantifiedBullets * 2) + Math.min(12, actionVerbHits);
+
+  const rawScore =
+    28 +
+    structureScore +
+    lengthScore +
+    impactScore +
+    keywordCoverage +
+    strengthsBonus -
+    weaknessPenalty -
+    suggestionsPenalty;
+
+  return Math.max(18, Math.min(96, Math.round(rawScore)));
+}
+
+function mergeAtsScore(
+  resumeText: string,
+  analysis: {
+    ats_score: number;
+    strengths?: string[];
+    weaknesses?: string[];
+    missing_keywords?: string[];
+    suggestions?: string[];
+  },
+) {
+  const contentScore = computeContentBasedAtsScore(resumeText, analysis);
+  const blendedScore = Math.round(contentScore * 0.7 + analysis.ats_score * 0.3);
+  return {
+    ...analysis,
+    ats_score: Math.max(18, Math.min(96, blendedScore)),
+  };
+}
+
 function sectionsToContent(sections: ResumeStructuredSections) {
   return [
     sections.summary ? `Summary\n${sections.summary}` : '',
@@ -140,13 +203,15 @@ export async function analyzeResume(req: AuthRequest, res: Response) {
       });
     }
 
-    const analysis = await analyzeResumeWithGroq(resumeText);
-    if (!analysis) {
+    const aiAnalysis = await analyzeResumeWithGroq(resumeText);
+    if (!aiAnalysis) {
       return res.status(503).json({
         success: false,
         message: 'Resume analysis service is unavailable',
       });
     }
+
+    const analysis = mergeAtsScore(resumeText, aiAnalysis);
 
     if (req.user?.userId) {
       await persistResumeEntry(req.user.userId, {
