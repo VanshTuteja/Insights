@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { downloadResumeFile, openResumeFile } from '@/lib/resume';
+import { downloadResumeFile } from '@/lib/resume';
+import { resolveAssetUrl } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { 
   Mail, 
@@ -21,7 +22,6 @@ import {
   Briefcase, 
   GraduationCap,
   Download,
-  ExternalLink,
   User
 } from 'lucide-react';
 
@@ -60,19 +60,7 @@ const CandidateDetailsDialog: React.FC<CandidateDetailsDialogProps> = ({
   onScheduleInterview,
 }) => {
   if (!candidate) return null;
-
-  const handleResumeView = async () => {
-    if (!candidate.candidateId) return;
-    try {
-      await openResumeFile(candidate.candidateId);
-    } catch (error: any) {
-      toast({
-        title: 'Could not open resume',
-        description: error.message || 'Please try downloading the resume instead.',
-        variant: 'destructive',
-      });
-    }
-  };
+  const candidateAvatarUrl = resolveAssetUrl(candidate.avatar);
 
   const handleResumeDownload = async () => {
     if (!candidate.candidateId) return;
@@ -93,7 +81,7 @@ const CandidateDetailsDialog: React.FC<CandidateDetailsDialogProps> = ({
         <DialogHeader>
           <div className="flex items-center space-x-4">
             <Avatar className="h-16 w-16">
-              <AvatarImage src={candidate.avatar} />
+              <AvatarImage src={candidateAvatarUrl} alt={candidate.candidateName} />
               <AvatarFallback>{candidate.candidateName[0]}</AvatarFallback>
             </Avatar>
             <div>
@@ -200,15 +188,6 @@ const CandidateDetailsDialog: React.FC<CandidateDetailsDialogProps> = ({
               <MessageCircle className="h-4 w-4 mr-2" />
               Contact Candidate
             </Button> */}
-            <Button
-              variant="outline"
-              size="lg"
-              disabled={!candidate.resumeUrl}
-              onClick={() => void handleResumeView()}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              View Resume
-            </Button>
             <Button
               variant="outline"
               size="lg"

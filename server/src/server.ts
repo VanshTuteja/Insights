@@ -37,6 +37,13 @@ app.use(cookieParser());
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com', 'https:'],
+        'media-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com', 'https:'],
+      },
+    },
   })
 );
 app.use(cors({
