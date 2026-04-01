@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import jsPDF from 'jspdf';
 import {
   Bar,
   BarChart,
@@ -147,7 +146,8 @@ export default function InterviewReport({ role, report, questions, onRestart }: 
       communication: item.scores.communication,
     }));
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
+    const { default: jsPDF } = await import('jspdf');
     const doc = new jsPDF();
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(18);

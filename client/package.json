@@ -47,6 +47,7 @@
     "framer-motion": "^12.23.12",
     "html2pdf.js": "^0.10.3",
     "input-otp": "^1.2.4",
+    "jobfinder-backend": "file:..",
     "jspdf": "^4.2.0",
     "lucide-react": "^0.446.0",
     "next-themes": "^0.3.0",

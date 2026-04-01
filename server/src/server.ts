@@ -138,7 +138,7 @@ async function startServer() {
     app.listen(config.port, () => {
       logger.info(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
       logger.info(`CORS origin: ${config.cors.origin}`);
-      logger.info(`MongoDB URI: ${config.mongodb.uri}`);
+      logger.info('MongoDB URI configured');
     });
     startInterviewReminderService();
   } catch (error) {

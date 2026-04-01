@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { 
   Briefcase, 
@@ -11,10 +10,6 @@ import {
   Instagram,
   ArrowRight,
   Sparkles,
-  Users,
-  Building,
-  Award,
-  Shield,
   Heart
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,13 +51,6 @@ const Footer = () => {
     { icon: Twitter, href: '#', label: 'Twitter' },
     { icon: Linkedin, href: '#', label: 'LinkedIn' },
     { icon: Instagram, href: '#', label: 'Instagram' },
-  ];
-
-  const stats = [
-    { icon: Users, number: '25K+', label: 'Active Users' },
-    { icon: Building, number: '500+', label: 'Partner Companies' },
-    { icon: Award, number: '95%', label: 'Success Rate' },
-    { icon: Shield, number: '100%', label: 'Secure' },
   ];
 
   return (
@@ -170,7 +158,7 @@ const Footer = () => {
                 </div>
 
                 <div className="flex space-x-4">
-                  {socialLinks.map((social, index) => (
+                  {socialLinks.map((social) => (
                     <motion.a
                       key={social.label}
                       href={social.href}

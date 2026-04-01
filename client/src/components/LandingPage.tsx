@@ -7,17 +7,9 @@ import { Toaster } from '@/components/ui/sonner';
 import { Toaster as LegacyToaster } from '@/components/ui/toaster';
 import {
   Briefcase,
-  Users,
-  TrendingUp,
-  MessageSquare,
   CheckCircle,
   ArrowRight,
   Sparkles,
-  Shield,
-  Zap,
-  Globe,
-  Award,
-  Target
 } from 'lucide-react';
 import FeaturesCarousel from './Carousel/FeaturesCarousel';
 import CompaniesSection from './Carousel/CompaniesSection';
@@ -27,114 +19,6 @@ import Footer from './Footer';
 
 const LandingPage: React.FC = () => {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
-
-  const features = [
-    {
-      icon: Briefcase,
-      title: 'AI Job Matching',
-      description: 'Get personalized job recommendations based on your skills and preferences',
-      gradient: 'from-blue-500 to-purple-600',
-    },
-    {
-      icon: Users,
-      title: 'Smart Resume Builder',
-      description: 'Create professional resumes with AI assistance and real-time feedback',
-      gradient: 'from-green-500 to-teal-600',
-    },
-    {
-      icon: MessageSquare,
-      title: 'Interview Preparation',
-      description: 'Practice with AI-driven mock interviews and detailed performance analysis',
-      gradient: 'from-orange-500 to-red-600',
-    },
-    {
-      icon: TrendingUp,
-      title: 'Career Insights',
-      description: 'Access real-time salary data and market trends for informed decisions',
-      gradient: 'from-purple-500 to-pink-600',
-    },
-  ];
-
-  const benefits = [
-    {
-      icon: Shield,
-      title: 'Secure & Private',
-      description: 'Your data is protected with enterprise-grade security',
-    },
-    {
-      icon: Zap,
-      title: 'Lightning Fast',
-      description: 'Get job matches in seconds with our AI algorithms',
-    },
-    {
-      icon: Globe,
-      title: 'Global Opportunities',
-      description: 'Access jobs from companies worldwide',
-    },
-    {
-      icon: Award,
-      title: 'Verified Companies',
-      description: 'All employers are verified for authenticity',
-    },
-  ];
-
-  const stats = [
-    { number: '50K+', label: 'Active Jobs' },
-    { number: '25K+', label: 'Happy Users' },
-    { number: '500+', label: 'Partner Companies' },
-    { number: '95%', label: 'Success Rate' },
-  ];
-
-  const howItWorks = [
-    {
-      step: '1',
-      title: 'Create Your Profile',
-      description: 'Build a comprehensive profile with our AI-powered resume builder',
-      icon: Users,
-    },
-    {
-      step: '2',
-      title: 'Get Matched',
-      description: 'Our AI analyzes your skills and preferences to find perfect job matches',
-      icon: Target,
-    },
-    {
-      step: '3',
-      title: 'Prepare & Apply',
-      description: 'Use our interview prep tools and apply with confidence',
-      icon: MessageSquare,
-    },
-    {
-      step: '4',
-      title: 'Land Your Dream Job',
-      description: 'Get hired faster with our comprehensive career support',
-      icon: Award,
-    },
-  ];
-
-  const testimonials = [
-    {
-      name: 'Sarah Johnson',
-      role: 'Software Engineer',
-      company: 'TechCorp',
-      content: 'JobFinder AI helped me land my dream job in just 2 weeks!',
-      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
-    },
-    {
-      name: 'Mike Chen',
-      role: 'Product Manager',
-      company: 'StartupLabs',
-      content: 'The interview preparation feature was a game-changer for me.',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-    },
-    {
-      name: 'Emily Davis',
-      role: 'UX Designer',
-      company: 'DesignStudio',
-      content: 'Amazing platform with incredible AI-powered insights.',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-    },
-  ];
 
   return (
     <div className="min-h-screen bg-background">

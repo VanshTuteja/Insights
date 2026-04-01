@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
-import { BarChart3, Briefcase, CalendarDays, Eye, TrendingUp, Users } from 'lucide-react';
+import { BarChart3, Briefcase, CalendarDays, TrendingUp, Users } from 'lucide-react';
 
 interface EmployerAnalyticsViewProps {
   jobs: any[];

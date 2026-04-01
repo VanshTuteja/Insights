@@ -1,32 +1,46 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { isProfileComplete } from '@/lib/profileCompletion';
-import Layout from '@/components/Layout/Layout';
-import LandingPage from '@/components/LandingPage';
-import Dashboard from '@/pages/Dashboard';
-import Jobs from '@/pages/Jobs';
-import SavedJobs from '@/pages/SavedJobs';
-import Interviews from '@/pages/Interviews';
-import ResumeBuilder from '@/pages/ResumeBuilder';
-import InterviewPrep from '@/pages/InterviewPrep';
-import Insights from '@/pages/Insights';
-import HelpSupport from '@/pages/HelpSupport';
-import Settings from '@/pages/Settings';
-import EmployerDashboard from '@/pages/EmployerDashboard';
-import EmployerInterviews from '@/pages/EmployerInterviews';
-import AdminDashboard from '@/pages/AdminDashboard';
-import AdminInsights from '@/pages/AdminInsights';
-import Profile from './pages/Profile';
-import Applications from './pages/Applications';
+import LoadingSpinner from '@/components/LoadingSpinner';
+
+const Layout = lazy(() => import('@/components/Layout/Layout'));
+const LandingPage = lazy(() => import('@/components/LandingPage'));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Jobs = lazy(() => import('@/pages/Jobs'));
+const SavedJobs = lazy(() => import('@/pages/SavedJobs'));
+const Interviews = lazy(() => import('@/pages/Interviews'));
+const ResumeBuilder = lazy(() => import('@/pages/ResumeBuilder'));
+const InterviewPrep = lazy(() => import('@/pages/InterviewPrep'));
+const Insights = lazy(() => import('@/pages/Insights'));
+const HelpSupport = lazy(() => import('@/pages/HelpSupport'));
+const Settings = lazy(() => import('@/pages/Settings'));
+const EmployerDashboard = lazy(() => import('@/pages/EmployerDashboard'));
+const EmployerInterviews = lazy(() => import('@/pages/EmployerInterviews'));
+const AdminDashboard = lazy(() => import('@/pages/AdminDashboard'));
+const AdminInsights = lazy(() => import('@/pages/AdminInsights'));
+const Profile = lazy(() => import('@/pages/Profile'));
+const Applications = lazy(() => import('@/pages/Applications'));
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <LoadingSpinner size="lg" />
+    </div>
+  );
+}
 
 const AppRoutes: React.FC = () => {
   const { user } = useAuthStore();
   const location = useLocation();
 
   if (!user) {
-    return <LandingPage />;
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <LandingPage />
+      </Suspense>
+    );
   }
 
   const isJobSeeker = user.role === 'jobseeker';
@@ -40,8 +54,9 @@ const AppRoutes: React.FC = () => {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<Layout />}>
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route path="/" element={<Layout />}>
         <Route
           index
           element={
@@ -114,8 +129,9 @@ const AppRoutes: React.FC = () => {
         />
         {/* <Route path="messaging" element={<Messaging />} /> */}
         <Route path="profile" element={<Profile />} />
-      </Route>
-    </Routes>
+        </Route>
+      </Routes>
+    </Suspense>
   );
 };
 

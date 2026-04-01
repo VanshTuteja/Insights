@@ -1,7 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
-import html2pdf from 'html2pdf.js';
 import { Download, FileSearch, Plus, Sparkles, Target, TrendingUp, Wand2 } from 'lucide-react';
 import {
   Bar,
@@ -459,6 +458,7 @@ const ResumeBuilder = () => {
       setLoading((current) => ({ ...current, download: true }));
       setExportMode(true);
       await new Promise((resolve) => setTimeout(resolve, 80));
+      const { default: html2pdf } = await import('html2pdf.js');
       await html2pdf().from(previewRef.current).set({
         filename: `${(deferredPreview.personal.name || 'resume').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`,
         margin: 0,

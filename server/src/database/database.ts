@@ -2,6 +2,30 @@ import mongoose from 'mongoose';
 import { config } from '../config/index';
 import logger from '../utils/logger';
 
+function maskMongoUri(uri: string) {
+  if (!uri) return '(empty)';
+  if (uri.length <= 24) return `${uri.slice(0, 8)}...`;
+  return `${uri.slice(0, 16)}...${uri.slice(-8)}`;
+}
+
+function validateMongoUri(uri: string) {
+  const value = uri.trim();
+
+  if (!value) {
+    throw new Error('MONGODB_URI is missing. Set it in server/.env using a mongodb:// or mongodb+srv:// connection string.');
+  }
+
+  if (value.includes('<') || value.includes('>')) {
+    throw new Error('MONGODB_URI still contains placeholder text. Replace it with your real MongoDB connection string.');
+  }
+
+  if (!value.startsWith('mongodb://') && !value.startsWith('mongodb+srv://')) {
+    throw new Error(`Invalid MONGODB_URI format: ${maskMongoUri(value)}. It must start with "mongodb://" or "mongodb+srv://".`);
+  }
+
+  return value;
+}
+
 class DatabaseConnection {
   private static instance: DatabaseConnection;
   private isConnected: boolean = false;
@@ -22,7 +46,8 @@ class DatabaseConnection {
     }
 
     try {
-      const mongoUri = config.mongodb.uri;
+      const mongoUri = validateMongoUri(config.mongodb.uri);
+      logger.info(`Attempting MongoDB connection using URI: ${maskMongoUri(mongoUri)}`);
       
       await mongoose.connect(mongoUri, {
         maxPoolSize: 10,
@@ -33,7 +58,7 @@ class DatabaseConnection {
       });
 
       this.isConnected = true;
-      logger.info(`Connected to MongoDB: ${mongoUri}`);
+      logger.info(`Connected to MongoDB: ${maskMongoUri(mongoUri)}`);
 
       // Handle connection events
       mongoose.connection.on('error', (error) => {

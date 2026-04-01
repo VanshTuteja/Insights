@@ -14,8 +14,7 @@ import {
   Phone, 
   Video, 
   Paperclip,
-  MessageCircle,
-  Clock
+  MessageCircle
 } from 'lucide-react';
 
 const Messaging: React.FC = () => {
