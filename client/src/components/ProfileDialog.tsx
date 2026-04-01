@@ -19,6 +19,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import { toast } from '@/hooks/use-toast';
 import { Camera, Save } from 'lucide-react';
 import axios from 'axios';
+import { prepareAvatarFile } from '@/lib/image';
 import { resolveAssetUrl } from '@/lib/utils';
 
 const profileSchema = z.object({
@@ -67,23 +68,35 @@ const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => 
     }
   }, [user, form]);
 
+  React.useEffect(() => {
+    return () => {
+      if (avatarPreview?.startsWith('blob:')) {
+        URL.revokeObjectURL(avatarPreview);
+      }
+    };
+  }, [avatarPreview]);
+
   const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('avatar', file);
-
     setAvatarUploading(true);
     try {
+      const preparedAvatar = await prepareAvatarFile(file);
+      const formData = new FormData();
+      formData.append('avatar', preparedAvatar.file);
+
+      setAvatarPreview(preparedAvatar.previewUrl);
       const response = await axios.post('/upload/avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      const avatarUrl = response.data?.data?.avatar;
-      if (avatarUrl) {
-        setAvatarPreview(avatarUrl);
-        await getProfile();
+      const uploadedAvatarUrl = response.data?.data?.avatar;
+      if (!uploadedAvatarUrl) {
+        throw new Error('Profile photo upload succeeded, but no image URL was returned.');
       }
+
+      setAvatarPreview(uploadedAvatarUrl);
+      await getProfile();
       toast({
         title: 'Profile photo uploaded',
         description: 'Your profile photo has been uploaded successfully.',

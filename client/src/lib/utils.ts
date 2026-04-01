@@ -7,9 +7,9 @@ export function cn(...inputs: ClassValue[]) {
 
 export function resolveAssetUrl(value?: string | null) {
   if (!value) return '';
-  if (/^(https?:)?\/\//i.test(value) || value.startsWith('data:')) return value;
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith('data:') || value.startsWith('blob:')) return value;
 
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const apiBase ='https://job-finder-4cem.onrender.com/api';
   const serverBase = apiBase.replace(/\/api\/?$/, '');
   return `${serverBase}${value.startsWith('/') ? value : `/${value}`}`;
 }
