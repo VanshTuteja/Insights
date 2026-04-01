@@ -1,1836 +1,1005 @@
-import { useEffect, useMemo, useState } from 'react';
+import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
+import html2pdf from 'html2pdf.js';
+import { Download, FileSearch, Plus, Sparkles, Target, TrendingUp, Wand2 } from 'lucide-react';
 import {
-  Briefcase,
-  CheckCircle2,
-  Download,
-  FileText,
-  FolderKanban,
-  GraduationCap,
-  Plus,
-  RefreshCw,
-  Sparkles,
-  Target,
-  Trash2,
-  Wand2,
-} from 'lucide-react';
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import AnimatedSection from '@/components/AnimatedSection';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import { ResumePreview } from '@/components/resume/ResumePreview';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
+import type { AtsAnalysis, ResumeCustomSection, ResumePreviewData, ResumeSectionItem, ResumeSectionsResponse, ResumeTemplateId } from '@/types/resumeAI';
 
-type ExperienceItem = {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  startDate: string;
-  endDate: string;
-  current: boolean;
-  bullets: string;
-};
+type PersonalInfo = ResumePreviewData['personal'];
 
-type ProjectItem = {
-  id: string;
-  name: string;
-  techStack: string;
-  bullets: string;
-};
-
-type EducationItem = {
-  id: string;
-  school: string;
-  degree: string;
-  year: string;
-};
-
-type CertificationItem = {
-  id: string;
-  name: string;
-  issuer: string;
-  year: string;
-};
-
-type ResumeCore = {
-  personal: {
-    name: string;
-    email: string;
-    phone: string;
-    location: string;
-    headline: string;
-    linkedin: string;
-    portfolio: string;
-  };
-  summary: string;
-  skills: string[];
-  technicalSkills: string;
-  tools: string[];
-  achievements: string[];
-  keywordBlock: string;
-  experience: ExperienceItem[];
-  projects: ProjectItem[];
-  education: EducationItem[];
-  certifications: CertificationItem[];
+type BuildFormState = {
+  personalInfo: PersonalInfo;
+  targetRole: string;
   jobDescription: string;
-};
-
-type AtsBreakdown = {
-  overall: number;
-  keywordMatch: number;
-  structure: number;
-  impact: number;
-  readability: number;
-  professionalism: number;
-  missingKeywords: string[];
-  matchedKeywords: string[];
-  suggestions: string[];
-};
-
-type RoleBlueprint = {
-  label: string;
-  headline: string;
   summary: string;
-  skills: string[];
+  coreSkills: string;
   technicalSkills: string;
-  tools: string[];
-  achievements: string[];
-  keywords: string[];
-  experience: ExperienceItem[];
-  projects: ProjectItem[];
-  education: EducationItem[];
-  certifications: CertificationItem[];
+  tools: string;
+  achievements: string;
+  languages: string;
+  interests: string;
+  experience: ResumeSectionItem[];
+  projects: ResumeSectionItem[];
+  education: ResumeSectionItem[];
+  certifications: ResumeSectionItem[];
+  customSections: ResumeCustomSection[];
 };
 
-type TemplateId = 'modern' | 'executive' | 'minimal';
-type RoleKey =
-  | 'frontend-developer'
-  | 'backend-developer'
-  | 'full-stack-developer'
-  | 'data-analyst'
-  | 'data-scientist'
-  | 'product-manager'
-  | 'ui-ux-designer'
-  | 'devops-engineer';
+type MarketRoleInsight = {
+  id: string;
+  label: string;
+  growthRate: string;
+  demandScore: number;
+  remoteShare: number;
+  easeScore: number;
+  trend: string;
+  keywords: string[];
+  why: string;
+};
 
-const STORAGE_KEY = 'resume-builder-professional-v2';
+const TEMPLATE_OPTIONS: Array<{ id: ResumeTemplateId; label: string }> = [
+  { id: 'modern', label: 'Modern' },
+  { id: 'minimal', label: 'Minimal' },
+  { id: 'professional', label: 'Professional' },
+  { id: 'creative', label: 'Creative' },
+];
 
-const createId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-
-const splitLines = (value: string) =>
-  value
-    .split(/\n|•|-/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const unique = (values: string[]) => Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-
-const starterEducation = (): EducationItem[] => [
+const MARKET_ROLE_INSIGHTS: MarketRoleInsight[] = [
   {
-    id: createId('edu'),
-    school: 'Your University',
-    degree: 'Bachelor of Technology / Bachelor of Science',
-    year: '2026',
+    id: 'full-stack-developer',
+    label: 'Full Stack Developer',
+    growthRate: '+17.4% YoY',
+    demandScore: 91,
+    remoteShare: 41,
+    easeScore: 88,
+    trend: 'Strong startup hiring and ownership-heavy roles',
+    keywords: ['react', 'node', 'express', 'mongodb', 'full stack', 'mern', 'api', 'javascript', 'typescript'],
+    why: 'Broad ownership, product delivery, and MERN experience usually convert well into shortlist-friendly roles.',
+  },
+  {
+    id: 'frontend-developer',
+    label: 'Frontend Developer',
+    growthRate: '+15.2% YoY',
+    demandScore: 87,
+    remoteShare: 38,
+    easeScore: 84,
+    trend: 'High demand for React, TypeScript, and polished UI execution',
+    keywords: ['react', 'frontend', 'ui', 'ux', 'typescript', 'javascript', 'tailwind', 'css', 'html'],
+    why: 'Strong UI polish, responsive work, and React keywords make frontend hiring more accessible.',
+  },
+  {
+    id: 'backend-developer',
+    label: 'Backend Developer',
+    growthRate: '+16.1% YoY',
+    demandScore: 86,
+    remoteShare: 33,
+    easeScore: 80,
+    trend: 'Reliable API and database profiles remain valuable',
+    keywords: ['node', 'express', 'backend', 'api', 'mongodb', 'sql', 'database', 'jwt'],
+    why: 'API, auth, and database signals usually align well with backend shortlist criteria.',
+  },
+  {
+    id: 'devops-engineer',
+    label: 'DevOps Engineer',
+    growthRate: '+18.0% YoY',
+    demandScore: 84,
+    remoteShare: 35,
+    easeScore: 66,
+    trend: 'Cloud, CI/CD, and deployment skills are trending strongly',
+    keywords: ['docker', 'aws', 'deployment', 'ci/cd', 'devops', 'linux', 'terraform'],
+    why: 'Good trending direction if the profile already shows deployment, cloud, or automation proof.',
+  },
+  {
+    id: 'data-analyst',
+    label: 'Data Analyst',
+    growthRate: '+13.1% YoY',
+    demandScore: 76,
+    remoteShare: 29,
+    easeScore: 74,
+    trend: 'Steady analytics demand across product and operations',
+    keywords: ['sql', 'excel', 'power bi', 'tableau', 'analytics', 'dashboard', 'reporting'],
+    why: 'Useful fallback when resumes show reporting, dashboards, SQL, or business insight skills.',
   },
 ];
 
-const ROLE_BLUEPRINTS: Record<RoleKey, RoleBlueprint> = {
-  'frontend-developer': {
-    label: 'Frontend Developer',
-    headline: 'Frontend Developer | React, TypeScript, Performance Optimization',
-    summary:
-      'Frontend developer with experience building responsive web products, improving usability, and shipping performant interfaces with React, TypeScript, and design systems. Strong at translating business requirements into clean, accessible experiences that improve conversion and user satisfaction.',
-    skills: [
-      'React',
-      'TypeScript',
-      'JavaScript',
-      'HTML5',
-      'CSS3',
-      'Tailwind CSS',
-      'Responsive Design',
-      'Accessibility',
-      'Redux',
-      'REST API Integration',
-      'Performance Optimization',
-      'Component Architecture',
-    ],
-    technicalSkills: 'React, TypeScript, JavaScript, Tailwind CSS, Redux Toolkit, Next.js, Vite, Jest, Cypress, REST APIs',
-    tools: ['Figma', 'Git', 'GitHub', 'Jira', 'Postman', 'Vercel'],
-    achievements: [
-      'Improved Lighthouse performance score from 68 to 93 by optimizing bundle size and image delivery.',
-      'Reduced onboarding drop-off by 24% after redesigning key user flows and simplifying form validation.',
-    ],
-    keywords: [
-      'react',
-      'typescript',
-      'javascript',
-      'frontend',
-      'ui',
-      'ux',
-      'accessibility',
-      'responsive design',
-      'performance optimization',
-      'component library',
-      'state management',
-      'rest api',
-    ],
-    experience: [
-      {
-        id: createId('exp'),
-        title: 'Frontend Developer Intern',
-        company: 'Product Studio',
-        location: 'Remote',
-        startDate: 'Jan 2025',
-        endDate: 'Present',
-        current: true,
-        bullets:
-          'Built reusable React components and responsive pages used across 3 customer-facing modules.\nImproved page load speed by 31% through code splitting, lazy loading, and CSS cleanup.\nPartnered with designers and backend engineers to deliver 12 production-ready features on schedule.',
-      },
-    ],
-    projects: [
-      {
-        id: createId('proj'),
-        name: 'ATS Resume Platform',
-        techStack: 'React, TypeScript, Tailwind CSS, Node.js',
-        bullets:
-          'Designed a resume workflow with live ATS feedback, keyword targeting, and export-ready templates.\nCreated form validation and structured resume sections that improved completion quality for end users.',
-      },
-    ],
-    education: starterEducation(),
-    certifications: [
-      {
-        id: createId('cert'),
-        name: 'Front-End Web Developer Certification',
-        issuer: 'Coursera / Meta',
-        year: '2025',
-      },
-    ],
-  },
-  'backend-developer': {
-    label: 'Backend Developer',
-    headline: 'Backend Developer | APIs, Databases, System Reliability',
-    summary:
-      'Backend developer focused on scalable API design, database modeling, and secure service architecture. Experienced in improving response times, maintaining clean codebases, and building reliable server-side workflows that support product growth.',
-    skills: [
-      'Node.js',
-      'Express.js',
-      'REST APIs',
-      'SQL',
-      'MongoDB',
-      'PostgreSQL',
-      'Authentication',
-      'System Design',
-      'Caching',
-      'Microservices',
-      'Error Handling',
-      'API Documentation',
-    ],
-    technicalSkills: 'Node.js, Express.js, TypeScript, PostgreSQL, MongoDB, Redis, JWT, Docker, REST APIs, Swagger',
-    tools: ['Postman', 'Docker', 'GitHub Actions', 'Jira', 'AWS'],
-    achievements: [
-      'Reduced average API response time by 38% by optimizing queries, indexing, and caching frequently accessed data.',
-      'Improved production stability by introducing structured logging and error tracking across critical services.',
-    ],
-    keywords: [
-      'backend',
-      'node.js',
-      'api',
-      'rest',
-      'database',
-      'sql',
-      'microservices',
-      'authentication',
-      'scalability',
-      'docker',
-      'aws',
-      'security',
-    ],
-    experience: [
-      {
-        id: createId('exp'),
-        title: 'Backend Developer Intern',
-        company: 'Cloud Systems Lab',
-        location: 'Bengaluru',
-        startDate: 'Feb 2025',
-        endDate: 'Present',
-        current: true,
-        bullets:
-          'Developed secure REST APIs for application workflows serving 5 internal teams.\nOptimized database queries and reduced report generation time from 14 seconds to 6 seconds.\nWrote validation and audit logging flows that improved production traceability and reduced support effort.',
-      },
-    ],
-    projects: [
-      {
-        id: createId('proj'),
-        name: 'Interview Scheduling API',
-        techStack: 'Node.js, Express.js, MongoDB, JWT',
-        bullets:
-          'Built role-based APIs for interview scheduling, reminders, and status tracking.\nImplemented schema validation and reusable middleware to improve data consistency and maintainability.',
-      },
-    ],
-    education: starterEducation(),
-    certifications: [],
-  },
-  'full-stack-developer': {
-    label: 'Full Stack Developer',
-    headline: 'Full Stack Developer | React, Node.js, Product Delivery',
-    summary:
-      'Full stack developer with hands-on experience building complete web applications from user interface to API and deployment. Comfortable owning features end to end, improving product quality, and aligning engineering decisions with business goals.',
-    skills: [
-      'React',
-      'TypeScript',
-      'Node.js',
-      'Express.js',
-      'MongoDB',
-      'PostgreSQL',
-      'REST APIs',
-      'Authentication',
-      'Responsive Design',
-      'Testing',
-      'Deployment',
-      'System Integration',
-    ],
-    technicalSkills: 'React, TypeScript, Node.js, Express.js, MongoDB, PostgreSQL, Docker, Tailwind CSS, REST APIs',
-    tools: ['Git', 'GitHub', 'Postman', 'Render', 'Vercel', 'Jira'],
-    achievements: [
-      'Delivered full-stack features 20% faster by creating reusable API and UI building blocks.',
-      'Improved application completion rate by 18% after simplifying backend validation and front-end form UX.',
-    ],
-    keywords: [
-      'full stack',
-      'react',
-      'node.js',
-      'typescript',
-      'api',
-      'database',
-      'deployment',
-      'testing',
-      'authentication',
-      'product delivery',
-    ],
-    experience: [
-      {
-        id: createId('exp'),
-        title: 'Full Stack Developer',
-        company: 'Campus Innovation Team',
-        location: 'Remote',
-        startDate: 'Aug 2024',
-        endDate: 'Present',
-        current: true,
-        bullets:
-          'Built and maintained a full-stack job platform covering authentication, applications, messaging, and analytics.\nReduced bug turnaround time by introducing reusable validation patterns and clearer API contracts.\nWorked closely with stakeholders to prioritize high-impact features and ship iterative improvements.',
-      },
-    ],
-    projects: [
-      {
-        id: createId('proj'),
-        name: 'Recruitment Workflow App',
-        techStack: 'React, Node.js, MongoDB, Tailwind CSS',
-        bullets:
-          'Created an end-to-end recruitment system with dashboards, application tracking, and interview modules.\nAdded analytics and resume tooling that increased user engagement and improved task completion flow.',
-      },
-    ],
-    education: starterEducation(),
-    certifications: [],
-  },
-  'data-analyst': {
-    label: 'Data Analyst',
-    headline: 'Data Analyst | SQL, Excel, BI Dashboards, Insights',
-    summary:
-      'Data analyst with experience turning raw business data into clear dashboards, reports, and decision-ready insights. Strong in SQL, spreadsheets, and visualization, with a focus on improving visibility, identifying trends, and supporting operational improvements.',
-    skills: [
-      'SQL',
-      'Excel',
-      'Power BI',
-      'Data Cleaning',
-      'Dashboarding',
-      'Reporting',
-      'Statistics',
-      'Data Visualization',
-      'Business Insights',
-      'A/B Analysis',
-      'KPI Tracking',
-      'Stakeholder Communication',
-    ],
-    technicalSkills: 'SQL, Excel, Power BI, Tableau, Python, Pandas, Google Sheets, Data Modeling',
-    tools: ['Power BI', 'Tableau', 'Excel', 'Jupyter', 'Google Sheets'],
-    achievements: [
-      'Automated recurring performance reports and reduced manual reporting effort by 9 hours per week.',
-      'Built executive dashboards that improved KPI visibility and enabled faster weekly decision-making.',
-    ],
-    keywords: [
-      'sql',
-      'dashboard',
-      'reporting',
-      'excel',
-      'power bi',
-      'tableau',
-      'data analysis',
-      'kpi',
-      'insights',
-      'data cleaning',
-    ],
-    experience: [
-      {
-        id: createId('exp'),
-        title: 'Data Analyst Intern',
-        company: 'Insight Metrics',
-        location: 'Hybrid',
-        startDate: 'Jan 2025',
-        endDate: 'Present',
-        current: true,
-        bullets:
-          'Created SQL queries and automated dashboards for operational and hiring performance metrics.\nImproved data accuracy by standardizing source files and validating business rules before reporting.\nPresented weekly insights to stakeholders and highlighted trends that informed backlog priorities.',
-      },
-    ],
-    projects: [
-      {
-        id: createId('proj'),
-        name: 'Hiring Funnel Dashboard',
-        techStack: 'Power BI, SQL, Excel',
-        bullets:
-          'Built an interactive dashboard to track applicant volume, interview conversion, and turnaround time.\nIdentified process bottlenecks that supported a 15% improvement in recruiter response time.',
-      },
-    ],
-    education: starterEducation(),
-    certifications: [],
-  },
-  'data-scientist': {
-    label: 'Data Scientist',
-    headline: 'Data Scientist | Machine Learning, Python, Predictive Modeling',
-    summary:
-      'Data scientist with practical experience in machine learning workflows, feature engineering, and translating data findings into measurable outcomes. Comfortable working from exploration to model evaluation while keeping business impact and clarity in focus.',
-    skills: [
-      'Python',
-      'Machine Learning',
-      'Pandas',
-      'NumPy',
-      'Scikit-learn',
-      'Feature Engineering',
-      'Model Evaluation',
-      'Statistics',
-      'SQL',
-      'Data Visualization',
-      'Experimentation',
-      'Forecasting',
-    ],
-    technicalSkills: 'Python, Pandas, NumPy, Scikit-learn, SQL, Jupyter, Matplotlib, Seaborn, Model Evaluation',
-    tools: ['Jupyter', 'Git', 'MLflow', 'Power BI'],
-    achievements: [
-      'Improved prediction accuracy by 14% after revising feature engineering and model selection strategy.',
-      'Reduced manual analysis time by automating exploratory analysis and reusable model reporting notebooks.',
-    ],
-    keywords: [
-      'python',
-      'machine learning',
-      'statistics',
-      'modeling',
-      'feature engineering',
-      'sql',
-      'forecasting',
-      'classification',
-      'regression',
-      'experimentation',
-    ],
-    experience: [
-      {
-        id: createId('exp'),
-        title: 'Data Science Intern',
-        company: 'Predictive Labs',
-        location: 'Remote',
-        startDate: 'Dec 2024',
-        endDate: 'Present',
-        current: true,
-        bullets:
-          'Prepared datasets, engineered features, and evaluated machine learning models for classification tasks.\nBuilt reproducible notebooks that improved collaboration and shortened review cycles.\nCommunicated model performance and practical trade-offs to non-technical stakeholders.',
-      },
-    ],
-    projects: [
-      {
-        id: createId('proj'),
-        name: 'Candidate Match Score Model',
-        techStack: 'Python, Pandas, Scikit-learn, SQL',
-        bullets:
-          'Developed a scoring workflow to rank candidate-job alignment using structured profile signals.\nMeasured performance with precision, recall, and feature importance to support practical interpretability.',
-      },
-    ],
-    education: starterEducation(),
-    certifications: [],
-  },
-  'product-manager': {
-    label: 'Product Manager',
-    headline: 'Product Manager | Roadmaps, User Research, Product Execution',
-    summary:
-      'Product manager with a strong bias toward clarity, prioritization, and measurable delivery. Experienced in gathering stakeholder input, turning insights into roadmap decisions, and partnering with engineering and design teams to ship improvements that matter to users.',
-    skills: [
-      'Roadmapping',
-      'User Research',
-      'Requirement Gathering',
-      'Backlog Prioritization',
-      'Stakeholder Management',
-      'Product Analytics',
-      'Experimentation',
-      'Go-to-Market',
-      'KPI Definition',
-      'Agile Delivery',
-      'Competitive Analysis',
-      'Cross-functional Leadership',
-    ],
-    technicalSkills: 'Product Analytics, Jira, Confluence, SQL, A/B Testing, User Interviews, PRDs, Agile Planning',
-    tools: ['Jira', 'Confluence', 'Notion', 'Figma', 'Mixpanel'],
-    achievements: [
-      'Launched a workflow improvement that increased candidate application completion by 19%.',
-      'Reduced cross-team ambiguity by introducing clearer PRDs, success metrics, and release checklists.',
-    ],
-    keywords: [
-      'product manager',
-      'roadmap',
-      'stakeholders',
-      'requirements',
-      'prioritization',
-      'analytics',
-      'kpi',
-      'user research',
-      'go to market',
-      'experimentation',
-    ],
-    experience: [
-      {
-        id: createId('exp'),
-        title: 'Associate Product Manager',
-        company: 'Digital Growth Team',
-        location: 'Hybrid',
-        startDate: 'Jul 2024',
-        endDate: 'Present',
-        current: true,
-        bullets:
-          'Owned discovery and delivery planning for candidate experience improvements across web workflows.\nWorked with engineers and designers to define requirements, acceptance criteria, and release priorities.\nTracked user behavior and feature performance to refine roadmap decisions and improve conversion metrics.',
-      },
-    ],
-    projects: [
-      {
-        id: createId('proj'),
-        name: 'Resume Quality Improvement Initiative',
-        techStack: 'Product Discovery, Analytics, Figma, Jira',
-        bullets:
-          'Defined a product concept for ATS-focused resume support with clear user problems, success metrics, and phased scope.\nAligned engineering and design around a roadmap that balanced quality, delivery speed, and user value.',
-      },
-    ],
-    education: starterEducation(),
-    certifications: [],
-  },
-  'ui-ux-designer': {
-    label: 'UI/UX Designer',
-    headline: 'UI/UX Designer | Design Systems, Research, User-Centered Interfaces',
-    summary:
-      'UI/UX designer focused on creating intuitive digital experiences grounded in research, hierarchy, and usability. Strong in wireframing, prototyping, and translating complex requirements into clean flows that feel clear and credible.',
-    skills: [
-      'User Experience Design',
-      'User Interface Design',
-      'Wireframing',
-      'Prototyping',
-      'Design Systems',
-      'Usability Testing',
-      'Information Architecture',
-      'Interaction Design',
-      'Visual Hierarchy',
-      'Accessibility',
-      'Research Synthesis',
-      'Design Handoff',
-    ],
-    technicalSkills: 'Figma, Adobe XD, Wireframing, Prototyping, User Flows, Design Systems, Accessibility Reviews',
-    tools: ['Figma', 'FigJam', 'Adobe XD', 'Notion', 'Miro'],
-    achievements: [
-      'Improved task completion rate by 21% after simplifying a multi-step application form and strengthening layout hierarchy.',
-      'Created reusable design system patterns that accelerated new screen design and reduced handoff issues.',
-    ],
-    keywords: [
-      'ui',
-      'ux',
-      'figma',
-      'design system',
-      'user research',
-      'wireframe',
-      'prototype',
-      'accessibility',
-      'interaction design',
-      'usability',
-    ],
-    experience: [
-      {
-        id: createId('exp'),
-        title: 'UI/UX Designer',
-        company: 'Experience Studio',
-        location: 'Remote',
-        startDate: 'Nov 2024',
-        endDate: 'Present',
-        current: true,
-        bullets:
-          'Designed user flows, wireframes, and polished interfaces for candidate and recruiter journeys.\nRan usability reviews and translated research findings into simpler, more confident interaction patterns.\nWorked with engineering to maintain consistency, accessibility, and feasible implementation scope.',
-      },
-    ],
-    projects: [
-      {
-        id: createId('proj'),
-        name: 'Resume Builder Redesign',
-        techStack: 'Figma, Design System, Usability Testing',
-        bullets:
-          'Redesigned an ATS-first resume experience with stronger hierarchy, clearer editing flow, and professional presentation.\nValidated layout changes against readability and usability feedback before development handoff.',
-      },
-    ],
-    education: starterEducation(),
-    certifications: [],
-  },
-  'devops-engineer': {
-    label: 'DevOps Engineer',
-    headline: 'DevOps Engineer | CI/CD, Cloud Infrastructure, Reliability',
-    summary:
-      'DevOps engineer with experience improving deployment workflows, operational visibility, and service reliability. Comfortable with automation, cloud tooling, and building engineering systems that support faster and safer releases.',
-    skills: [
-      'CI/CD',
-      'Docker',
-      'Kubernetes',
-      'AWS',
-      'Linux',
-      'Infrastructure Automation',
-      'Monitoring',
-      'Logging',
-      'Scripting',
-      'Deployment Pipelines',
-      'Reliability',
-      'Security Basics',
-    ],
-    technicalSkills: 'Docker, Kubernetes, AWS, Linux, Bash, GitHub Actions, Terraform, Monitoring, Nginx',
-    tools: ['AWS', 'Docker', 'GitHub Actions', 'Grafana', 'Prometheus'],
-    achievements: [
-      'Reduced deployment time by 42% by streamlining CI/CD workflows and release checks.',
-      'Improved environment stability through monitoring dashboards, alerting, and deployment rollback practices.',
-    ],
-    keywords: [
-      'devops',
-      'ci/cd',
-      'docker',
-      'kubernetes',
-      'aws',
-      'linux',
-      'automation',
-      'monitoring',
-      'reliability',
-      'infrastructure',
-    ],
-    experience: [
-      {
-        id: createId('exp'),
-        title: 'DevOps Engineer Intern',
-        company: 'Platform Operations',
-        location: 'Remote',
-        startDate: 'Jan 2025',
-        endDate: 'Present',
-        current: true,
-        bullets:
-          'Maintained CI/CD pipelines and deployment scripts for web services across staging and production environments.\nImproved observability with centralized logs and dashboarding for critical workflows.\nPartnered with developers to reduce release risk and standardize build and deployment practices.',
-      },
-    ],
-    projects: [
-      {
-        id: createId('proj'),
-        name: 'Automated Deployment Workflow',
-        techStack: 'Docker, GitHub Actions, AWS',
-        bullets:
-          'Built an automated deployment pipeline with environment checks and release notifications.\nReduced manual deployment steps and improved release consistency for multi-service applications.',
-      },
-    ],
-    education: starterEducation(),
-    certifications: [],
-  },
+const createId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+
+const sanitizeText = (value: string) =>
+  value
+    .replace(/\*\*/g, '')
+    .replace(/__/g, '')
+    .replace(/`/g, '')
+    .trim();
+
+const splitList = (value: string) =>
+  value
+    .split(/,|\n|•|;/)
+    .map((item) => sanitizeText(item))
+    .filter(Boolean);
+
+const joinLines = (items: string[]) => items.map((item) => sanitizeText(item)).filter(Boolean).join('\n');
+
+const createEntry = (type: 'experience' | 'project' | 'education' | 'certification'): ResumeSectionItem => {
+  if (type === 'experience') return { id: createId('exp'), title: '', subtitle: '', meta: '', bullets: [''] };
+  if (type === 'project') return { id: createId('proj'), title: '', subtitle: '', meta: '', bullets: [''] };
+  if (type === 'education') return { id: createId('edu'), title: '', subtitle: '', meta: '', bullets: [] };
+  return { id: createId('cert'), title: '', subtitle: '', meta: '', bullets: [] };
 };
 
-const createResumeFromBlueprint = (role: RoleKey): ResumeCore => {
-  const blueprint = ROLE_BLUEPRINTS[role];
-  return {
-    personal: {
-      name: 'Your Name',
-      email: 'your.email@example.com',
-      phone: '+91 98765 43210',
-      location: 'Your City, India',
-      headline: blueprint.headline,
-      linkedin: 'linkedin.com/in/yourprofile',
-      portfolio: 'portfolio.example.com',
+const INITIAL_FORM: BuildFormState = {
+  personalInfo: {
+    name: 'Alex Johnson',
+    email: 'alex@email.com',
+    phone: '+91 98765 43210',
+    location: 'Bengaluru, India',
+    headline: 'Full Stack Developer | MERN | AI-Assisted Product Building',
+    linkedin: 'linkedin.com/in/alexjohnson',
+    portfolio: 'alexbuilds.dev',
+  },
+  targetRole: 'Full Stack Developer',
+  jobDescription: '',
+  summary:
+    'Full stack developer building responsive products, scalable backend workflows, and AI-assisted user experiences with measurable product impact.',
+  coreSkills: 'React, TypeScript, Node.js, Express.js, MongoDB, Tailwind CSS, REST APIs, Problem Solving',
+  technicalSkills: 'MERN Stack, JWT Auth, Zustand, Vite, Groq API, PDF Parsing',
+  tools: 'GitHub, Postman, VS Code, Figma, Render, Vercel',
+  achievements: 'Improved dashboard responsiveness by 32%\nBuilt AI resume and interview workflows\nDelivered end-to-end resume module upgrades',
+  languages: 'English, Hindi',
+  interests: 'Open source, UI systems, AI products',
+  experience: [
+    {
+      id: createId('exp'),
+      title: 'Full Stack Developer Intern',
+      subtitle: 'Product Studio',
+      meta: 'Jan 2025 - Present | Bengaluru, India',
+      bullets: [
+        'Built MERN features for job search workflows and account flows.',
+        'Improved dashboard performance by 32% through leaner data fetching.',
+        'Integrated AI services for resume analysis and content enhancement.',
+      ],
     },
-    summary: blueprint.summary,
-    skills: [...blueprint.skills],
-    technicalSkills: blueprint.technicalSkills,
-    tools: [...blueprint.tools],
-    achievements: [...blueprint.achievements],
-    keywordBlock: blueprint.keywords.join(', '),
-    experience: blueprint.experience.map((item) => ({ ...item, id: createId('exp') })),
-    projects: blueprint.projects.map((item) => ({ ...item, id: createId('proj') })),
-    education: blueprint.education.map((item) => ({ ...item, id: createId('edu') })),
-    certifications: blueprint.certifications.map((item) => ({ ...item, id: createId('cert') })),
-    jobDescription: '',
-  };
+  ],
+  projects: [
+    {
+      id: createId('proj'),
+      title: 'AI Job Finder Platform',
+      subtitle: 'React, Node.js, MongoDB',
+      meta: 'Final Year Project',
+      bullets: [
+        'Built AI resume analysis, generation, and preview workflows.',
+        'Added personalized job recommendations and interview tooling.',
+      ],
+    },
+  ],
+  education: [{ id: createId('edu'), title: 'B.Tech in Computer Science', subtitle: 'ABC University', meta: '2026', bullets: [] }],
+  certifications: [{ id: createId('cert'), title: 'Meta Front-End Developer Certificate', subtitle: 'Coursera', meta: '2025', bullets: [] }],
+  customSections: [],
 };
 
-const getInitialState = (): { selectedRole: RoleKey; template: TemplateId; resume: ResumeCore } => {
-  if (typeof window !== 'undefined') {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as {
-          selectedRole: RoleKey;
-          template: TemplateId;
-          resume: ResumeCore;
-        };
-        if (parsed?.selectedRole && parsed?.template && parsed?.resume) {
-          return parsed;
-        }
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
+const EMPTY_PREVIEW: ResumePreviewData = {
+  personal: INITIAL_FORM.personalInfo,
+  summary: INITIAL_FORM.summary,
+  skills: splitList(INITIAL_FORM.coreSkills),
+  technicalSkills: splitList(INITIAL_FORM.technicalSkills),
+  tools: splitList(INITIAL_FORM.tools),
+  experience: INITIAL_FORM.experience,
+  projects: INITIAL_FORM.projects,
+  education: INITIAL_FORM.education,
+  certifications: INITIAL_FORM.certifications,
+  achievements: splitList(INITIAL_FORM.achievements),
+  languages: splitList(INITIAL_FORM.languages),
+  interests: splitList(INITIAL_FORM.interests),
+  customSections: [],
+  strengths: [],
+  weaknesses: [],
+  suggestions: [],
+  atsScore: 0,
+  sourceText: '',
+};
+
+const SECTION_PATTERNS: Array<{ key: string; pattern: RegExp }> = [
+  { key: 'summary', pattern: /^(summary|professional summary|profile|objective)$/i },
+  { key: 'experience', pattern: /^(experience|work experience|employment|professional experience)$/i },
+  { key: 'projects', pattern: /^(projects|personal projects)$/i },
+  { key: 'education', pattern: /^(education|academic background)$/i },
+  { key: 'skills', pattern: /^(skills|technical skills|core skills)$/i },
+  { key: 'certifications', pattern: /^(certifications|licenses)$/i },
+  { key: 'achievements', pattern: /^(achievements|awards)$/i },
+  { key: 'languages', pattern: /^(languages)$/i },
+  { key: 'interests', pattern: /^(interests|hobbies)$/i },
+];
+
+function parseResumeSections(text: string) {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  const sections: Record<string, string[]> = {};
+  let currentKey = 'intro';
+  for (const line of lines) {
+    const matched = SECTION_PATTERNS.find((item) => item.pattern.test(line.replace(/:$/, '')));
+    if (matched) {
+      currentKey = matched.key;
+      sections[currentKey] = sections[currentKey] || [];
+      continue;
     }
+    sections[currentKey] = sections[currentKey] || [];
+    sections[currentKey].push(line);
+  }
+  return sections;
+}
+
+function parseSectionItems(lines: string[], type: 'experience' | 'project' | 'education' | 'certification') {
+  const entries = lines
+    .filter(Boolean)
+    .map((line) => line.replace(/^[-•]\s*/, '').trim())
+    .slice(0, 6)
+    .map((line) => {
+      const parts = line.split('|').map((part) => part.trim());
+      if (type === 'education' || type === 'certification') {
+        const [title = '', subtitle = '', meta = ''] = parts;
+        return { id: createId(type === 'education' ? 'edu' : 'cert'), title: sanitizeText(title), subtitle: sanitizeText(subtitle), meta: sanitizeText(meta), bullets: [] };
+      }
+      const [title = '', subtitle = '', meta = '', ...rest] = parts;
+      return { id: createId(type === 'experience' ? 'exp' : 'proj'), title: sanitizeText(title), subtitle: sanitizeText(subtitle), meta: sanitizeText(meta), bullets: rest.length ? splitList(rest.join(' | ')) : [sanitizeText(line)] };
+    });
+  return entries.length ? entries : [createEntry(type)];
+}
+
+function buildFormFromResumeText(text: string, current: BuildFormState): BuildFormState {
+  const sections = parseResumeSections(text);
+  const intro = sections.intro || [];
+  const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || current.personalInfo.email;
+  const phone = text.match(/(?:\+?\d{1,3}[\s-]?)?(?:\d[\s-]?){10,14}/)?.[0]?.trim() || current.personalInfo.phone;
+  const linkedin = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/[^\s]+/i)?.[0] || current.personalInfo.linkedin;
+  const portfolio = text.match(/(?:https?:\/\/)?(?:www\.)?(?!linkedin\.com)[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?/i)?.[0] || current.personalInfo.portfolio;
+  return {
+    ...current,
+    personalInfo: { ...current.personalInfo, name: sanitizeText(intro[0] || current.personalInfo.name), headline: sanitizeText(intro[1] || current.personalInfo.headline), email, phone, linkedin, portfolio },
+    summary: joinLines((sections.summary || []).slice(0, 5)) || current.summary,
+    coreSkills: (sections.skills || []).join(', ') || current.coreSkills,
+    achievements: joinLines(sections.achievements || []) || current.achievements,
+    languages: (sections.languages || []).join(', ') || current.languages,
+    interests: (sections.interests || []).join(', ') || current.interests,
+    experience: parseSectionItems(sections.experience || [], 'experience'),
+    projects: parseSectionItems(sections.projects || [], 'project'),
+    education: parseSectionItems(sections.education || [], 'education'),
+    certifications: parseSectionItems(sections.certifications || [], 'certification'),
+  };
+}
+
+function buildPreviewFromForm(form: BuildFormState, extras?: Partial<Pick<ResumePreviewData, 'strengths' | 'weaknesses' | 'suggestions' | 'atsScore' | 'sourceText'>>) {
+  return {
+    personal: form.personalInfo,
+    summary: form.summary,
+    skills: splitList(form.coreSkills),
+    technicalSkills: splitList(form.technicalSkills),
+    tools: splitList(form.tools),
+    experience: form.experience.filter((item) => item.title || item.subtitle || item.bullets.some(Boolean)),
+    projects: form.projects.filter((item) => item.title || item.subtitle || item.bullets.some(Boolean)),
+    education: form.education.filter((item) => item.title || item.subtitle || item.meta),
+    certifications: form.certifications.filter((item) => item.title || item.subtitle || item.meta),
+    achievements: splitList(form.achievements),
+    languages: splitList(form.languages),
+    interests: splitList(form.interests),
+    customSections: form.customSections.map((item) => ({ ...item, items: item.items.filter(Boolean) })).filter((item) => item.title || item.items.length),
+    strengths: extras?.strengths || [],
+    weaknesses: extras?.weaknesses || [],
+    suggestions: extras?.suggestions || [],
+    atsScore: extras?.atsScore || 0,
+    sourceText: extras?.sourceText || '',
+  } satisfies ResumePreviewData;
+}
+
+function buildPreviewFromGeneratedSections(form: BuildFormState, sections: ResumeSectionsResponse, extras?: Partial<Pick<ResumePreviewData, 'strengths' | 'weaknesses' | 'suggestions' | 'atsScore' | 'sourceText'>>) {
+  const base = buildPreviewFromForm(form, extras);
+  const mapLines = (items: string[], prefix: 'exp' | 'proj' | 'edu') => items.map((item) => {
+    const parts = item.split('|').map((part) => part.trim());
+    return { id: createId(prefix), title: parts[0] || '', subtitle: parts[1] || '', meta: parts[2] || '', bullets: splitList(parts.slice(3).join(' | ') || item) };
+  });
+  return {
+    ...base,
+    summary: sections.summary || base.summary,
+    skills: sections.skills.length ? sections.skills : base.skills,
+    experience: sections.experience.length ? mapLines(sections.experience, 'exp') : base.experience,
+    projects: sections.projects.length ? mapLines(sections.projects, 'proj') : base.projects,
+    education: sections.education.length ? sections.education.map((item) => {
+      const parts = item.split('|').map((part) => part.trim());
+      return { id: createId('edu'), title: parts[0] || '', subtitle: parts[1] || '', meta: parts[2] || '', bullets: [] };
+    }) : base.education,
+  };
+}
+
+function sectionText(items: ResumeSectionItem[]) {
+  return items.map((item) => [item.title, item.subtitle, item.meta, ...item.bullets.filter(Boolean)].filter(Boolean).join(' | ')).filter(Boolean).join('\n');
+}
+
+function buildImproveText(form: BuildFormState) {
+  return [
+    form.personalInfo.name,
+    form.personalInfo.headline,
+    form.summary,
+    'Skills', form.coreSkills,
+    'Technical Skills', form.technicalSkills,
+    'Tools', form.tools,
+    'Experience', sectionText(form.experience),
+    'Projects', sectionText(form.projects),
+    'Education', sectionText(form.education),
+    'Certifications', sectionText(form.certifications),
+    'Achievements', form.achievements,
+    form.customSections.map((item) => `${item.title}\n${item.items.join('\n')}`).join('\n\n'),
+  ].filter(Boolean).join('\n\n');
+}
+
+function updateSectionItem(items: ResumeSectionItem[], id: string, field: 'title' | 'subtitle' | 'meta', value: string) {
+  return items.map((item) => (item.id === id ? { ...item, [field]: sanitizeText(value) } : item));
+}
+
+function updateSectionBullets(items: ResumeSectionItem[], id: string, value: string) {
+  return items.map((item) => (item.id === id ? { ...item, bullets: value.split('\n').map((line) => sanitizeText(line)) } : item));
+}
+
+function getAtsBreakdown(analysis: AtsAnalysis | null) {
+  if (!analysis) {
+    return [];
   }
 
-  return {
-    selectedRole: 'full-stack-developer',
-    template: 'modern',
-    resume: createResumeFromBlueprint('full-stack-developer'),
-  };
-};
+  const keywordStrength = Math.max(25, Math.min(96, 55 + analysis.strengths.length * 8 - analysis.missing_keywords.length * 4));
+  const contentStrength = Math.max(20, Math.min(95, analysis.ats_score + analysis.strengths.length * 3 - analysis.weaknesses.length * 2));
+  const riskLevel = Math.max(10, Math.min(90, analysis.weaknesses.length * 12 + analysis.missing_keywords.length * 6));
 
-const countWords = (value: string) => value.split(/\s+/).filter(Boolean).length;
-
-const buildResumeText = (resume: ResumeCore) => {
-  const sections = [
-    resume.personal.name,
-    resume.personal.headline,
-    resume.personal.email,
-    resume.personal.phone,
-    resume.personal.location,
-    resume.personal.linkedin,
-    resume.personal.portfolio,
-    resume.summary,
-    resume.skills.join(' '),
-    resume.technicalSkills,
-    resume.tools.join(' '),
-    resume.achievements.join(' '),
-    resume.keywordBlock,
-    resume.jobDescription,
-    resume.experience.map((item) => `${item.title} ${item.company} ${item.location} ${item.bullets}`).join(' '),
-    resume.projects.map((item) => `${item.name} ${item.techStack} ${item.bullets}`).join(' '),
-    resume.education.map((item) => `${item.school} ${item.degree} ${item.year}`).join(' '),
-    resume.certifications.map((item) => `${item.name} ${item.issuer} ${item.year}`).join(' '),
+  return [
+    { name: 'ATS Score', value: analysis.ats_score },
+    { name: 'Keyword Match', value: keywordStrength },
+    { name: 'Content Depth', value: contentStrength },
+    { name: 'Risk Level', value: riskLevel },
   ];
+}
 
-  return sections.join(' ').replace(/\s+/g, ' ').trim();
-};
-
-const extractRoleKeywords = (jobDescription: string, blueprint: RoleBlueprint) => {
-  const lower = jobDescription.toLowerCase();
-  return unique(
-    blueprint.keywords.filter((keyword) => lower.includes(keyword.toLowerCase())),
-  );
-};
-
-const calculateAtsScore = (resume: ResumeCore, blueprint: RoleBlueprint): AtsBreakdown => {
-  const text = buildResumeText(resume).toLowerCase();
-  const targetedKeywords = unique([...blueprint.keywords, ...extractRoleKeywords(resume.jobDescription, blueprint)]);
-  const matchedKeywords = targetedKeywords.filter((keyword) => text.includes(keyword.toLowerCase()));
-  const missingKeywords = targetedKeywords.filter((keyword) => !matchedKeywords.includes(keyword));
-
-  const keywordMatch = targetedKeywords.length
-    ? Math.round((matchedKeywords.length / targetedKeywords.length) * 100)
-    : 65;
-
-  let structure = 0;
-  if (resume.personal.name && resume.personal.email && resume.personal.phone) structure += 20;
-  if (resume.summary.length >= 80) structure += 20;
-  if (resume.skills.length >= 8) structure += 15;
-  if (resume.experience.length > 0) structure += 20;
-  if (resume.projects.length > 0) structure += 10;
-  if (resume.education.length > 0) structure += 10;
-  if (resume.achievements.length > 0 || resume.certifications.length > 0) structure += 5;
-
-  const impactBullets = resume.experience
-    .flatMap((item) => splitLines(item.bullets))
-    .filter((bullet) => /\d/.test(bullet)).length;
-  const projectImpact = resume.projects
-    .flatMap((item) => splitLines(item.bullets))
-    .filter((bullet) => /\d/.test(bullet)).length;
-  const impact = Math.min(100, 35 + impactBullets * 14 + projectImpact * 8 + resume.achievements.length * 6);
-
-  const words = countWords(text);
-  const longBullets = resume.experience
-    .flatMap((item) => splitLines(item.bullets))
-    .filter((bullet) => countWords(bullet) > 28).length;
-  const readability = Math.max(45, 100 - Math.max(0, words - 750) * 0.08 - longBullets * 4);
-
-  const summaryHasRole = resume.summary.toLowerCase().includes(blueprint.label.toLowerCase().split(' ')[0].toLowerCase());
-  const headlineFilled = resume.personal.headline.trim().length >= 12;
-  const cleanLinks = [resume.personal.linkedin, resume.personal.portfolio].filter(Boolean).length;
-  const professionalism = Math.min(
-    100,
-    55 +
-      (summaryHasRole ? 15 : 0) +
-      (headlineFilled ? 10 : 0) +
-      Math.min(10, cleanLinks * 5) +
-      Math.min(10, resume.certifications.length * 5),
-  );
-
-  const suggestions: string[] = [];
-  if (resume.summary.length < 80) suggestions.push('Expand the summary to 3-4 strong lines focused on role fit and measurable value.');
-  if (resume.skills.length < 10) suggestions.push('Add more role-specific skills so the resume looks targeted instead of generic.');
-  if (impactBullets < 3) suggestions.push('Add numbers to experience bullets such as percentages, volumes, revenue, time saved, or performance gains.');
-  if (missingKeywords.length > 0) {
-    suggestions.push(`Include missing target keywords naturally across the summary, skills, and bullets: ${missingKeywords.slice(0, 6).join(', ')}.`);
-  }
-  if (!resume.projects.length) suggestions.push('Add at least one project that supports the selected profile and showcases tools you used.');
-  if (countWords(resume.summary) > 95) suggestions.push('Tighten the summary so it stays concise and easier for recruiters to scan.');
-
-  const overall = Math.round(
-    keywordMatch * 0.33 +
-      structure * 0.2 +
-      impact * 0.2 +
-      readability * 0.12 +
-      professionalism * 0.15,
-  );
-
-  return {
-    overall,
-    keywordMatch,
-    structure,
-    impact,
-    readability: Math.round(readability),
-    professionalism,
-    missingKeywords,
-    matchedKeywords,
-    suggestions: suggestions.slice(0, 5),
-  };
-};
-
-const getResumeLinesForExport = (resume: ResumeCore) => {
-  const lines: string[] = [];
-  lines.push(resume.personal.name || 'Your Name');
-  if (resume.personal.headline) lines.push(resume.personal.headline);
-  lines.push(
-    [
-      resume.personal.email,
-      resume.personal.phone,
-      resume.personal.location,
-      resume.personal.linkedin,
-      resume.personal.portfolio,
-    ]
-      .filter(Boolean)
-      .join(' | '),
-  );
-  lines.push('');
-
-  const pushSection = (title: string, content: string[]) => {
-    if (!content.some((item) => item.trim().length > 0)) return;
-    lines.push(title);
-    content.forEach((item) => lines.push(item));
-    lines.push('');
-  };
-
-  pushSection('PROFESSIONAL SUMMARY', [resume.summary]);
-  pushSection('CORE SKILLS', [resume.skills.join(', ')]);
-  pushSection('TECHNICAL STACK', [resume.technicalSkills]);
-  pushSection('TOOLS', [resume.tools.join(', ')]);
-  pushSection('KEY ACHIEVEMENTS', resume.achievements.map((item) => `- ${item}`));
-
-  if (resume.experience.length > 0) {
-    const content = resume.experience.flatMap((item) => [
-      `${item.title} | ${item.company} | ${item.location}`,
-      `${item.startDate} - ${item.current ? 'Present' : item.endDate}`,
-      ...splitLines(item.bullets).map((bullet) => `- ${bullet}`),
-      '',
-    ]);
-    pushSection('PROFESSIONAL EXPERIENCE', content);
+function getFeedbackDistribution(analysis: AtsAnalysis | null) {
+  if (!analysis) {
+    return [];
   }
 
-  if (resume.projects.length > 0) {
-    const content = resume.projects.flatMap((item) => [
-      `${item.name}${item.techStack ? ` | ${item.techStack}` : ''}`,
-      ...splitLines(item.bullets).map((bullet) => `- ${bullet}`),
-      '',
-    ]);
-    pushSection('PROJECTS', content);
-  }
+  return [
+    { name: 'Strengths', value: analysis.strengths.length, color: '#16a34a' },
+    { name: 'Weaknesses', value: analysis.weaknesses.length, color: '#dc2626' },
+    { name: 'Suggestions', value: analysis.suggestions.length, color: '#2563eb' },
+    { name: 'Missing Keywords', value: analysis.missing_keywords.length, color: '#d97706' },
+  ].filter((item) => item.value > 0);
+}
 
-  if (resume.education.length > 0) {
-    pushSection(
-      'EDUCATION',
-      resume.education.map((item) => `${item.school} | ${item.degree} | ${item.year}`),
-    );
-  }
+function wrapChartLabel(value: string) {
+  return value.replace(/\s+/g, '');
+}
 
-  if (resume.certifications.length > 0) {
-    pushSection(
-      'CERTIFICATIONS',
-      resume.certifications.map((item) => `${item.name} | ${item.issuer} | ${item.year}`),
-    );
-  }
-
-  return lines;
-};
-
-const sanitizeFileName = (name: string) =>
-  (name || 'resume')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'resume';
-
-const saveBlob = (blob: Blob, fileName: string) => {
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.URL.revokeObjectURL(url);
-};
-
-const scoreTone = (score: number) => {
-  if (score >= 85) return { label: 'Excellent', bar: 'bg-emerald-500' };
-  if (score >= 70) return { label: 'Strong', bar: 'bg-sky-500' };
-  if (score >= 55) return { label: 'Needs refinement', bar: 'bg-amber-500' };
-  return { label: 'Low', bar: 'bg-rose-500' };
-};
+function getRecommendedRoles(text: string, analysis: AtsAnalysis | null) {
+  const normalized = `${text} ${(analysis?.missing_keywords || []).join(' ')} ${(analysis?.strengths || []).join(' ')}`.toLowerCase();
+  return MARKET_ROLE_INSIGHTS.map((role) => {
+    const matchedKeywords = role.keywords.filter((keyword) => normalized.includes(keyword.toLowerCase())).length;
+    const score = role.easeScore + matchedKeywords * 6 + role.remoteShare / 10;
+    return { ...role, matchedKeywords, score: Math.round(score) };
+  })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
 
 const ResumeBuilder = () => {
-  const initialState = useMemo(() => getInitialState(), []);
-  const [selectedRole, setSelectedRole] = useState<RoleKey>(initialState.selectedRole);
-  const [template, setTemplate] = useState<TemplateId>(initialState.template);
-  const [resume, setResume] = useState<ResumeCore>(initialState.resume);
-  const [activeTab, setActiveTab] = useState('profile');
-  const [newSkill, setNewSkill] = useState('');
-  const [newTool, setNewTool] = useState('');
-  const [exportLoading, setExportLoading] = useState<'pdf' | 'docx' | null>(null);
-  const [improvingContent, setImprovingContent] = useState(false);
-  const blueprint = ROLE_BLUEPRINTS[selectedRole];
-  const theme = useThemeStore((state) => state.theme);
+  const { theme } = useThemeStore();
   const themePreview = useMemo(() => getThemePreview(theme), [theme]);
   const darkTheme = isDarkTheme(theme);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const cacheRef = useRef(new Map<string, unknown>());
+
+  const [activeTab, setActiveTab] = useState('upload');
+  const [template, setTemplate] = useState<ResumeTemplateId>('modern');
+  const [buildForm, setBuildForm] = useState<BuildFormState>(INITIAL_FORM);
+  const [previewData, setPreviewData] = useState<ResumePreviewData>(EMPTY_PREVIEW);
+  const deferredPreview = useDeferredValue(previewData);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadedResumeText, setUploadedResumeText] = useState('');
+  const [analysis, setAnalysis] = useState<AtsAnalysis | null>(null);
+  const [exportMode, setExportMode] = useState(false);
+  const [loading, setLoading] = useState({ analyze: false, generate: false, improve: false, download: false });
+  const atsBreakdown = useMemo(() => getAtsBreakdown(analysis), [analysis]);
+  const feedbackDistribution = useMemo(() => getFeedbackDistribution(analysis), [analysis]);
+  const recommendedRoles = useMemo(() => getRecommendedRoles(uploadedResumeText, analysis), [uploadedResumeText, analysis]);
+  const trendingRoles = useMemo(() => [...MARKET_ROLE_INSIGHTS].sort((a, b) => b.demandScore - a.demandScore).slice(0, 4), []);
 
   useEffect(() => {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        selectedRole,
-        template,
-        resume,
-      }),
-    );
-  }, [selectedRole, template, resume]);
-
-  const ats = useMemo(() => calculateAtsScore(resume, blueprint), [resume, blueprint]);
-  const qualityTone = scoreTone(ats.overall);
-  const completion = useMemo(() => {
-    let score = 0;
-    if (resume.personal.name && resume.personal.email && resume.personal.phone) score += 20;
-    if (resume.summary.length >= 80) score += 15;
-    if (resume.skills.length >= 8) score += 15;
-    if (resume.experience.length > 0) score += 20;
-    if (resume.projects.length > 0) score += 10;
-    if (resume.education.length > 0) score += 10;
-    if (resume.technicalSkills.trim()) score += 5;
-    if (resume.achievements.length > 0) score += 5;
-    return Math.min(100, score);
-  }, [resume]);
-
-  const updatePersonal = (field: keyof ResumeCore['personal'], value: string) => {
-    setResume((current) => ({
-      ...current,
-      personal: {
-        ...current.personal,
-        [field]: value,
-      },
-    }));
-  };
-
-  const addExperience = () => {
-    setResume((current) => ({
-      ...current,
-      experience: [
-        ...current.experience,
-        {
-          id: createId('exp'),
-          title: '',
-          company: '',
-          location: '',
-          startDate: '',
-          endDate: '',
-          current: false,
-          bullets: '',
-        },
-      ],
-    }));
-  };
-
-  const addProject = () => {
-    setResume((current) => ({
-      ...current,
-      projects: [
-        ...current.projects,
-        {
-          id: createId('proj'),
-          name: '',
-          techStack: '',
-          bullets: '',
-        },
-      ],
-    }));
-  };
-
-  const addEducation = () => {
-    setResume((current) => ({
-      ...current,
-      education: [
-        ...current.education,
-        {
-          id: createId('edu'),
-          school: '',
-          degree: '',
-          year: '',
-        },
-      ],
-    }));
-  };
-
-  const addCertification = () => {
-    setResume((current) => ({
-      ...current,
-      certifications: [
-        ...current.certifications,
-        {
-          id: createId('cert'),
-          name: '',
-          issuer: '',
-          year: '',
-        },
-      ],
-    }));
-  };
-
-  const applyRoleStarter = (replaceAll: boolean) => {
-    const starter = createResumeFromBlueprint(selectedRole);
-    setResume((current) => {
-      if (replaceAll) return starter;
-      return {
-        ...current,
-        personal: {
-          ...starter.personal,
-          ...current.personal,
-          headline: current.personal.headline || starter.personal.headline,
-        },
-        summary: current.summary || starter.summary,
-        skills: unique([...current.skills, ...starter.skills]),
-        technicalSkills: current.technicalSkills || starter.technicalSkills,
-        tools: unique([...current.tools, ...starter.tools]),
-        achievements: current.achievements.length ? current.achievements : starter.achievements,
-        keywordBlock: current.keywordBlock || starter.keywordBlock,
-        experience: current.experience.length ? current.experience : starter.experience,
-        projects: current.projects.length ? current.projects : starter.projects,
-        education: current.education.length ? current.education : starter.education,
-        certifications: current.certifications.length ? current.certifications : starter.certifications,
-      };
-    });
-
-    toast({
-      title: replaceAll ? 'Role starter applied' : 'Role content enhanced',
-      description: replaceAll
-        ? `Loaded a complete ${blueprint.label} starter resume with professional example content.`
-        : `Added strong ${blueprint.label} content where your resume was still incomplete.`,
-    });
-  };
-
-  const autoImprove = async () => {
-    const jobKeywords = extractRoleKeywords(resume.jobDescription, blueprint);
-    const keywordMerge = unique([...blueprint.keywords, ...jobKeywords]);
-    const enhancementLine =
-      selectedRole === 'product-manager'
-        ? 'Translated stakeholder feedback and user behavior into prioritized roadmap decisions and measurable delivery outcomes.'
-        : selectedRole === 'ui-ux-designer'
-        ? 'Improved clarity and conversion through user-centered iteration, usability feedback, and stronger visual hierarchy.'
-        : 'Delivered measurable improvements in quality, speed, and user outcomes using role-relevant tools and best practices.';
-
-    setImprovingContent(true);
-    try {
-      const { data } = await axios.post<{ success: boolean; data: ResumeCore }>(
-        '/resume/improve',
-        {
-          roleLabel: blueprint.label,
-          jobDescription: resume.jobDescription,
-          resume: {
-            ...resume,
-            personal: {
-              ...resume.personal,
-              headline: resume.personal.headline || blueprint.headline,
-            },
-            skills: unique([...resume.skills, ...jobKeywords]),
-            keywordBlock: resume.keywordBlock || keywordMerge.join(', '),
-          },
-        },
+    startTransition(() => {
+      setPreviewData((current) =>
+        buildPreviewFromForm(buildForm, {
+          strengths: current.strengths,
+          weaknesses: current.weaknesses,
+          suggestions: current.suggestions,
+          atsScore: current.atsScore,
+          sourceText: current.sourceText,
+        })
       );
-
-      if (!data.success || !data.data) {
-        throw new Error('Resume improvement failed');
-      }
-
-      setResume(data.data);
-      toast({
-        title: 'Resume improved',
-        description: `Groq generated stronger ${blueprint.label}-focused content from your filled details.`,
-      });
-      return;
-    } catch (error: any) {
-      setResume((current) => ({
-        ...current,
-        personal: {
-          ...current.personal,
-          headline: current.personal.headline || blueprint.headline,
-        },
-        summary:
-          current.summary.length >= 80
-            ? current.summary
-            : `${blueprint.summary} Experienced in ${unique([...current.skills, ...jobKeywords]).slice(0, 6).join(', ')} with a strong focus on business impact, reliability, and professional execution.`,
-        skills: unique([...current.skills, ...blueprint.skills, ...jobKeywords]),
-        technicalSkills: current.technicalSkills || blueprint.technicalSkills,
-        tools: unique([...current.tools, ...blueprint.tools]),
-        achievements: unique([...current.achievements, ...blueprint.achievements]).slice(0, 4),
-        keywordBlock: keywordMerge.join(', '),
-        experience:
-          current.experience.length === 0
-            ? blueprint.experience
-            : current.experience.map((item, index) => {
-                const fallbackBullets = splitLines(blueprint.experience[index % blueprint.experience.length]?.bullets || '').slice(0, 2);
-                const existingBullets = splitLines(item.bullets);
-                const improvedBullets = unique([...existingBullets, ...fallbackBullets, enhancementLine]).slice(0, 4);
-                return {
-                  ...item,
-                  bullets: improvedBullets.join('\n'),
-                };
-              }),
-        projects:
-          current.projects.length === 0
-            ? blueprint.projects
-            : current.projects.map((item, index) => {
-                const fallback = splitLines(blueprint.projects[index % blueprint.projects.length]?.bullets || '').slice(0, 2);
-                return {
-                  ...item,
-                  bullets: unique([...splitLines(item.bullets), ...fallback]).slice(0, 3).join('\n'),
-                };
-              }),
-        education: current.education.length ? current.education : blueprint.education,
-        certifications: current.certifications.length ? current.certifications : blueprint.certifications,
-      }));
-
-      toast({
-        title: 'Resume improved with fallback',
-        description:
-          error.response?.data?.message || 'Groq was unavailable, so local ATS-focused improvements were applied instead.',
-      });
-    } finally {
-      setImprovingContent(false);
-    }
-  };
-
-  const resetDraft = () => {
-    const starter = createResumeFromBlueprint(selectedRole);
-    setResume(starter);
-    toast({
-      title: 'Draft reset',
-      description: `Started again with the ${blueprint.label} professional template.`,
     });
-  };
+  }, [buildForm]);
 
-  const handleExport = async (type: 'pdf' | 'docx') => {
-    const fileStem = sanitizeFileName(resume.personal.name || blueprint.label);
-    const lines = getResumeLinesForExport(resume);
-    setExportLoading(type);
+  const layoutShell = cn(
+    'min-h-screen bg-background text-foreground transition-colors duration-300',
+    darkTheme
+      ? 'bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_28%),linear-gradient(180deg,#020617_0%,#0f172a_100%)]'
+      : 'bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)]'
+  );
+  const cardClass = cn('border backdrop-blur-xl', darkTheme ? 'border-white/10 bg-slate-950/60' : 'border-white/60 bg-white/80');
+  const softPanel = cn('rounded-[28px] border p-6', darkTheme ? 'border-white/10 bg-white/5' : 'border-slate-200/80 bg-slate-50/90');
 
+  const handleDownload = async () => {
+    if (!previewRef.current) return;
     try {
-      if (type === 'docx') {
-        const { Document, Packer, Paragraph, TextRun } = await import('docx');
-        const children = lines.map((line) => {
-          if (line === '') {
-            return new Paragraph({ text: '' });
-          }
-
-          const isHeading = /^[A-Z ]+$/.test(line);
-          return new Paragraph({
-            spacing: isHeading ? { before: 220, after: 100 } : { after: 50 },
-            children: [
-              new TextRun({
-                text: line,
-                bold: isHeading || line === (resume.personal.name || 'Your Name'),
-                size: isHeading ? 24 : undefined,
-              }),
-            ],
-          });
-        });
-
-        const doc = new Document({
-          sections: [
-            {
-              properties: {},
-              children,
-            },
-          ],
-        });
-
-        const blob = await Packer.toBlob(doc);
-        saveBlob(blob, `${fileStem}.docx`);
-        toast({
-          title: 'Word download ready',
-          description: 'The resume has been exported as a professional .docx file.',
-        });
-        return;
-      }
-
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 16;
-      const usableWidth = pageWidth - margin * 2;
-      let y = 18;
-
-      const addLine = (text: string, fontSize: number, bold = false) => {
-        doc.setFont('helvetica', bold ? 'bold' : 'normal');
-        doc.setFontSize(fontSize);
-        const split = doc.splitTextToSize(text, usableWidth);
-        split.forEach((piece: string) => {
-          if (y > pageHeight - 16) {
-            doc.addPage();
-            y = 18;
-          }
-          doc.text(piece, margin, y);
-          y += fontSize === 18 ? 7.5 : 5.6;
-        });
-      };
-
-      lines.forEach((line, index) => {
-        if (!line) {
-          y += 2.5;
-          return;
-        }
-
-        const isHeading = /^[A-Z ]+$/.test(line);
-        const isName = index === 0;
-        addLine(line, isName ? 18 : isHeading ? 11.5 : 10, isHeading || isName);
-        if (isHeading) y += 1;
-      });
-
-      const pdfBlob = doc.output('blob');
-      saveBlob(pdfBlob, `${fileStem}.pdf`);
-      toast({
-        title: 'PDF download ready',
-        description: 'The resume has been exported as a clean ATS-friendly PDF.',
-      });
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: 'destructive',
-        title: `${type.toUpperCase()} export failed`,
-        description: 'The export could not be completed. Please try again after saving your latest changes.',
-      });
+      setLoading((current) => ({ ...current, download: true }));
+      setExportMode(true);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      await html2pdf().from(previewRef.current).set({
+        filename: `${(deferredPreview.personal.name || 'resume').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`,
+        margin: 0,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['.resume-section', '.resume-block'] },
+      }).save();
+    } catch (error: any) {
+      toast({ title: 'Download failed', description: error?.message || 'Could not export the resume as PDF.', variant: 'destructive' });
     } finally {
-      setExportLoading(null);
+      setExportMode(false);
+      setLoading((current) => ({ ...current, download: false }));
     }
   };
 
-  const setAchievementsFromText = (value: string) => {
-    setResume((current) => ({
-      ...current,
-      achievements: splitLines(value),
-    }));
+  const handleAnalyze = async () => {
+    if (!uploadFile) {
+      toast({ title: 'Upload a PDF first', description: 'Choose a resume PDF to analyze.', variant: 'destructive' });
+      return;
+    }
+    try {
+      setLoading((current) => ({ ...current, analyze: true }));
+      const formData = new FormData();
+      formData.append('resume', uploadFile);
+      const response = await axios.post('/resume/analyze', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const payload = response.data?.data as { resumeText: string; analysis: AtsAnalysis };
+      setUploadedResumeText(payload.resumeText);
+      setAnalysis(payload.analysis);
+      startTransition(() => {
+        setPreviewData((current) => ({
+          ...current,
+          atsScore: payload.analysis.ats_score,
+          strengths: payload.analysis.strengths,
+          weaknesses: payload.analysis.weaknesses,
+          suggestions: payload.analysis.suggestions,
+          sourceText: payload.resumeText,
+        }));
+      });
+      toast({ title: 'ATS analysis ready', description: 'Upload analyzed successfully.' });
+    } catch (error: any) {
+      toast({ title: 'Analysis failed', description: error.response?.data?.message || 'Could not analyze the uploaded resume.', variant: 'destructive' });
+    } finally {
+      setLoading((current) => ({ ...current, analyze: false }));
+    }
   };
 
-  const templateShell =
-    template === 'executive'
-      ? 'bg-white text-slate-900 border border-slate-200 shadow-xl'
-      : template === 'minimal'
-      ? 'bg-stone-50 text-stone-900 border border-stone-200 shadow-lg'
-      : 'bg-slate-950 text-slate-100 border border-slate-800 shadow-[0_24px_60px_rgba(15,23,42,0.32)]';
-
-  const previewMuted =
-    template === 'executive'
-      ? 'text-slate-600'
-      : template === 'minimal'
-      ? 'text-stone-600'
-      : 'text-slate-300';
-
-  const previewHeading =
-    template === 'executive'
-      ? 'text-slate-900 border-slate-300'
-      : template === 'minimal'
-      ? 'text-stone-900 border-stone-300'
-      : 'text-white border-slate-700';
-
-  const pageShellStyle = {
-    backgroundImage: darkTheme
-      ? 'radial-gradient(circle at top left, hsl(var(--primary) / 0.24), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.18), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.92) 100%)'
-      : 'radial-gradient(circle at top left, hsl(var(--primary) / 0.14), transparent 28%), radial-gradient(circle at top right, hsl(var(--accent) / 0.22), transparent 24%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.72) 52%, hsl(var(--background)) 100%)',
+  const handleGenerate = async () => {
+    try {
+      setLoading((current) => ({ ...current, generate: true }));
+      const payload = {
+        personalInfo: buildForm.personalInfo,
+        education: buildForm.education.map((item) => ({ degree: item.title, school: item.subtitle, year: item.meta })),
+        experience: buildForm.experience.map((item) => ({ title: item.title, company: item.subtitle, duration: item.meta, highlights: item.bullets.join('; ') })),
+        skills: splitList(`${buildForm.coreSkills},${buildForm.technicalSkills},${buildForm.tools}`),
+        projects: buildForm.projects.map((item) => ({ name: item.title, tech: item.subtitle, highlights: item.bullets.join('; ') })),
+        certifications: buildForm.certifications.map((item) => ({ name: item.title, issuer: item.subtitle, year: item.meta })),
+        achievements: splitList(buildForm.achievements),
+        customSections: buildForm.customSections,
+        targetRole: buildForm.targetRole,
+        summary: buildForm.summary,
+        jobDescription: buildForm.jobDescription,
+        template,
+      };
+      const cacheKey = `generate:${JSON.stringify(payload)}`;
+      const cached = cacheRef.current.get(cacheKey) as { sections: ResumeSectionsResponse } | undefined;
+      const sections = cached?.sections || (await axios.post('/resume/generate', payload)).data?.data?.sections;
+      cacheRef.current.set(cacheKey, { sections });
+      startTransition(() => {
+        setPreviewData((current) => buildPreviewFromGeneratedSections(buildForm, sections, {
+          atsScore: current.atsScore,
+          strengths: current.strengths,
+          weaknesses: current.weaknesses,
+          suggestions: current.suggestions,
+          sourceText: current.sourceText,
+        }));
+      });
+      toast({ title: 'Resume generated', description: 'The preview was updated with AI-generated resume content.' });
+    } catch (error: any) {
+      toast({ title: 'Generation failed', description: error.response?.data?.message || 'Could not generate the resume.', variant: 'destructive' });
+    } finally {
+      setLoading((current) => ({ ...current, generate: false }));
+    }
   };
 
-  const heroCardClass = cn(
-    'overflow-hidden border shadow-premium-lg backdrop-blur-xl',
-    darkTheme ? 'bg-card/80 text-card-foreground border-primary/20' : 'bg-card/90 text-card-foreground border-primary/10',
-  );
+  const handleImprove = async () => {
+    const textToImprove = uploadedResumeText.trim() || buildImproveText(buildForm);
+    if (!textToImprove.trim()) {
+      toast({ title: 'Nothing to improve', description: 'Add resume content or analyze an uploaded resume first.', variant: 'destructive' });
+      return;
+    }
+    try {
+      setLoading((current) => ({ ...current, improve: true }));
+      const response = await axios.post('/resume/improve', { text: textToImprove, template });
+      const data = response.data?.data as { improvedText: string; sections: ResumeSectionsResponse };
+      const nextForm = buildFormFromResumeText(data.improvedText, buildForm);
+      setBuildForm(nextForm);
+      startTransition(() => {
+        setPreviewData((current) => buildPreviewFromGeneratedSections(nextForm, data.sections, {
+          atsScore: current.atsScore,
+          strengths: current.strengths,
+          weaknesses: current.weaknesses,
+          suggestions: current.suggestions,
+          sourceText: data.improvedText,
+        }));
+      });
+      toast({ title: 'Resume improved', description: uploadedResumeText ? 'Your uploaded resume content was improved and loaded into the builder.' : 'Your builder content was improved with AI.' });
+    } catch (error: any) {
+      toast({ title: 'Improvement failed', description: error.response?.data?.message || 'Could not improve the resume.', variant: 'destructive' });
+    } finally {
+      setLoading((current) => ({ ...current, improve: false }));
+    }
+  };
 
-  const mainCardClass = cn(
-    'border shadow-premium-lg backdrop-blur',
-    darkTheme ? 'bg-card/80 border-primary/10' : 'bg-card/95 border-border/80',
-  );
+  const handleResetBuilder = () => {
+    setBuildForm(INITIAL_FORM);
+    startTransition(() => {
+      setPreviewData((current) =>
+        buildPreviewFromForm(INITIAL_FORM, {
+          strengths: current.strengths,
+          weaknesses: current.weaknesses,
+          suggestions: current.suggestions,
+          atsScore: current.atsScore,
+          sourceText: current.sourceText,
+        })
+      );
+    });
+    toast({ title: 'Builder reset', description: 'The build resume form has been reset to its default state.' });
+  };
 
-  const nestedCardClass = cn(
-    'border shadow-sm',
-    darkTheme ? 'bg-background/50 border-border/70' : 'bg-background border-border/80',
-  );
-
-  const metricCardClass = cn(
-    'rounded-2xl border p-4',
-    darkTheme ? 'border-primary/20 bg-background/50 backdrop-blur' : 'border-primary/10 bg-background/75',
-  );
-
-  const subtlePanelClass = cn(
-    'rounded-2xl border p-3 text-sm',
-    darkTheme ? 'border-border/70 bg-background/50 text-foreground/80' : 'border-border bg-muted/60 text-foreground/80',
+  const renderSectionEditor = (
+    title: string,
+    items: ResumeSectionItem[],
+    stateKey: 'experience' | 'projects' | 'education' | 'certifications',
+    type: 'experience' | 'project' | 'education' | 'certification'
+  ) => (
+    <Card className={softPanel}>
+      <CardHeader className="p-0 pb-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-xl">{title}</CardTitle>
+            <CardDescription>Use detailed entries so the preview feels like a complete professional resume.</CardDescription>
+          </div>
+          <Button variant="outline" onClick={() => setBuildForm((current) => ({ ...current, [stateKey]: [...current[stateKey], createEntry(type)] }))}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add {title.slice(0, -1)}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5 p-0">
+        {items.map((item) => (
+          <div key={item.id} className={cn('rounded-3xl border p-5', darkTheme ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white')}>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Input placeholder={type === 'education' ? 'Degree / Course' : 'Title'} value={item.title} onChange={(event) => setBuildForm((current) => ({ ...current, [stateKey]: updateSectionItem(current[stateKey], item.id, 'title', event.target.value) }))} />
+              <Input placeholder={type === 'education' ? 'Institution' : type === 'certification' ? 'Issuer' : 'Company / Stack'} value={item.subtitle} onChange={(event) => setBuildForm((current) => ({ ...current, [stateKey]: updateSectionItem(current[stateKey], item.id, 'subtitle', event.target.value) }))} />
+              <Input placeholder="Date / Meta / Location" value={item.meta} onChange={(event) => setBuildForm((current) => ({ ...current, [stateKey]: updateSectionItem(current[stateKey], item.id, 'meta', event.target.value) }))} />
+            </div>
+            {type !== 'education' && type !== 'certification' ? (
+              <Textarea className="mt-4 min-h-[130px]" placeholder="One bullet per line" value={item.bullets.join('\n')} onChange={(event) => setBuildForm((current) => ({ ...current, [stateKey]: updateSectionBullets(current[stateKey], item.id, event.target.value) }))} />
+            ) : null}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background px-4 py-6 md:px-6 lg:px-8" style={pageShellStyle}>
-      <div className="pointer-events-none absolute inset-0">
-        <div className={cn('absolute left-[-6rem] top-[-5rem] h-48 w-48 rounded-full blur-3xl', darkTheme ? 'bg-primary/20' : 'bg-primary/10')} />
-        <div className={cn('absolute right-[-4rem] top-16 h-56 w-56 rounded-full blur-3xl', darkTheme ? 'bg-accent/20' : 'bg-accent/25')} />
-      </div>
-
-      <div className="relative mx-auto max-w-7xl space-y-6">
-        <AnimatedSection>
-          <Card className={heroCardClass}>
-            <CardContent className="grid gap-6 p-6 lg:grid-cols-[1.35fr_0.9fr] lg:p-8">
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  <Badge className="w-fit border border-primary/25 bg-primary/10 text-primary hover:bg-primary/10">
-                    ATS-first resume builder
+    <div className={layoutShell}>
+      <div className="mx-auto max-w-[1700px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="sticky top-0 z-40 pb-4 pt-1">
+          <AnimatedSection>
+            <Card className={cn(cardClass, 'overflow-hidden')}>
+              <CardContent className="grid gap-8 p-6 lg:grid-cols-[1.2fr_0.8fr] lg:p-9">
+                <div className="space-y-6">
+                  <Badge className="w-fit border-0 px-4 py-2 text-xs uppercase tracking-[0.28em] text-white" style={{ backgroundColor: themePreview.primary }}>
+                    AI Resume Platform
                   </Badge>
-                  <Badge variant="outline" className="border-border/70 bg-background/40 text-foreground/80">
-                    Theme synced: {themePreview.label}
-                  </Badge>
-                </div>
-                <div className="space-y-3">
-                  <h1 className="max-w-3xl text-3xl font-semibold tracking-tight md:text-5xl">
-                    Build a professional resume that is role-specific, export-ready, and recruiter-friendly.
-                  </h1>
-                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
-                    This version gives you a complete starter resume, profile-specific improvements, better ATS guidance,
-                    and direct downloads for both PDF and Word.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Button className="shadow-premium" onClick={() => applyRoleStarter(false)}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Apply role starter
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-primary/20 bg-background/30 hover:bg-accent/80"
-                    onClick={() => void autoImprove()}
-                    disabled={improvingContent}
-                  >
-                    {improvingContent ? <LoadingSpinner /> : <Wand2 className="mr-2 h-4 w-4" />}
-                    {improvingContent ? 'Improving with Groq...' : 'Auto improve content'}
-                  </Button>
-                  <Button variant="outline" className="border-primary/20 bg-background/30 hover:bg-accent/80" onClick={resetDraft}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Reset draft
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                {[
-                  { label: 'ATS score', value: `${ats.overall}/100`, hint: qualityTone.label },
-                  { label: 'Profile completion', value: `${completion}%`, hint: completion >= 85 ? 'Ready to export' : 'Add more detail' },
-                  { label: 'Matched keywords', value: `${ats.matchedKeywords.length}`, hint: blueprint.label },
-                ].map((metric) => (
-                  <div key={metric.label} className={metricCardClass}>
-                    <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{metric.label}</p>
-                    <p className="mt-3 text-3xl font-semibold">{metric.value}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{metric.hint}</p>
+                  <div className="space-y-3">
+                    <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl xl:text-5xl">A larger, fuller resume workspace with analysis, builder controls, preview, and export</h1>
+                    <p className="max-w-4xl text-base leading-8 text-muted-foreground">
+                      The builder now stays more spacious, includes fuller professional-resume sections, keeps AI improve actions directly beside generation, and adds a stronger upload analysis report with charts and role guidance.
+                    </p>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </AnimatedSection>
-
-        <div className="grid gap-6">
-          <AnimatedSection delay={0.05}>
-            <Card className={mainCardClass}>
-              <CardHeader className="space-y-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                  <div>
-                    <CardTitle className="text-2xl">Resume workspace</CardTitle>
-                    <CardDescription className="mt-1 max-w-2xl">
-                      Pick a target profile, refine the draft, and keep the content sharply aligned with the role you want.
-                    </CardDescription>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {[
+                      { label: 'ATS Score', value: `${deferredPreview.atsScore || 0}` },
+                      { label: 'Templates', value: '4' },
+                      { label: 'Builder Sections', value: '10+' },
+                    ].map((item) => (
+                      <div key={item.label} className={softPanel}>
+                        <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{item.label}</p>
+                        <p className="mt-3 text-3xl font-semibold">{item.value}</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Target profile</p>
-                      <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as RoleKey)}>
-                        <SelectTrigger className="w-full min-w-[220px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(ROLE_BLUEPRINTS).map(([value, option]) => (
-                            <SelectItem key={value} value={value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                </div>
+
+                <div className={softPanel}>
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Current template</p>
+                      <p className="mt-2 text-xl font-semibold">{TEMPLATE_OPTIONS.find((item) => item.id === template)?.label}</p>
                     </div>
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Preview style</p>
-                      <Select value={template} onValueChange={(value) => setTemplate(value as TemplateId)}>
-                        <SelectTrigger className="w-full min-w-[180px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="modern">Modern</SelectItem>
-                          <SelectItem value="executive">Executive</SelectItem>
-                          <SelectItem value="minimal">Minimal</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <Select value={template} onValueChange={(value) => setTemplate(value as ResumeTemplateId)}>
+                      <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TEMPLATE_OPTIONS.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="mt-6 space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">ATS readiness</span>
+                      <span className="font-medium">{deferredPreview.atsScore || 0}%</span>
                     </div>
+                    <Progress value={deferredPreview.atsScore || 0} className="h-2.5" />
+                    <p className="text-sm leading-7 text-muted-foreground">The preview updates from your builder data, uploaded resume insights, and AI-generated improvements while keeping theme visibility strong.</p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </AnimatedSection>
+        </div>
 
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <Button variant="outline" className="justify-start border-primary/20 bg-background/40 hover:bg-accent/80" onClick={() => applyRoleStarter(false)}>
-                    <Target className="mr-2 h-4 w-4" />
-                    Fill missing profile data
-                  </Button>
-                  <Button variant="outline" className="justify-start border-primary/20 bg-background/40 hover:bg-accent/80" onClick={() => applyRoleStarter(true)}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Load full profile sample
-                  </Button>
-                  <Button variant="outline" className="justify-start border-primary/20 bg-background/40 hover:bg-accent/80" onClick={() => handleExport('pdf')} disabled={exportLoading !== null}>
-                    {exportLoading === 'pdf' ? <LoadingSpinner size="sm" className="mr-2" /> : <Download className="mr-2 h-4 w-4" />}
-                    Download PDF
-                  </Button>
-                  <Button variant="outline" className="justify-start border-primary/20 bg-background/40 hover:bg-accent/80" onClick={() => handleExport('docx')} disabled={exportLoading !== null}>
-                    {exportLoading === 'docx' ? <LoadingSpinner size="sm" className="mr-2" /> : <Download className="mr-2 h-4 w-4" />}
-                    Download Word
-                  </Button>
-                </div>
+        <div className={cn('mt-6 grid gap-6', activeTab === 'build' ? '2xl:grid-cols-[minmax(0,1.18fr)_minmax(520px,0.82fr)]' : 'grid-cols-1')}>
+          <AnimatedSection delay={0.08}>
+            <Card className={cardClass}>
+              <CardHeader>
+                <CardTitle>Resume workspace</CardTitle>
+                <CardDescription>Upload and analyze first, then move into the expanded builder with generation and improvement controls.</CardDescription>
               </CardHeader>
-
               <CardContent>
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full grid-cols-4 bg-muted/70">
-                    <TabsTrigger value="profile">Profile</TabsTrigger>
-                    <TabsTrigger value="experience">Experience</TabsTrigger>
-                    <TabsTrigger value="projects">Projects</TabsTrigger>
-                    <TabsTrigger value="qualifications">Qualifications</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="profile" className="mt-6 space-y-6">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground/80">Full name</label>
-                        <Input value={resume.personal.name} onChange={(event) => updatePersonal('name', event.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground/80">Headline</label>
-                        <Input value={resume.personal.headline} onChange={(event) => updatePersonal('headline', event.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground/80">Email</label>
-                        <Input value={resume.personal.email} onChange={(event) => updatePersonal('email', event.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground/80">Phone</label>
-                        <Input value={resume.personal.phone} onChange={(event) => updatePersonal('phone', event.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground/80">Location</label>
-                        <Input value={resume.personal.location} onChange={(event) => updatePersonal('location', event.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground/80">LinkedIn</label>
-                        <Input value={resume.personal.linkedin} onChange={(event) => updatePersonal('linkedin', event.target.value)} />
-                      </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-sm font-medium text-foreground/80">Portfolio or GitHub</label>
-                        <Input value={resume.personal.portfolio} onChange={(event) => updatePersonal('portfolio', event.target.value)} />
-                      </div>
-                    </div>
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+                  <div className={cn('sticky top-0 z-30 rounded-2xl border p-2 backdrop-blur', darkTheme ? 'border-white/10 bg-slate-950/95' : 'border-slate-200 bg-white/95')}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="upload">Upload & Analyze</TabsTrigger>
+                      <TabsTrigger value="build">Build Resume</TabsTrigger>
+                    </TabsList>
+                  </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground/80">Professional summary</label>
-                      <Textarea
-                        rows={5}
-                        value={resume.summary}
-                        onChange={(event) => setResume((current) => ({ ...current, summary: event.target.value }))}
-                      />
-                    </div>
+                  <TabsContent value="upload" className="space-y-6">
+                    <Card className={softPanel}>
+                      <CardContent className="space-y-5 p-0">
+                        <div className="space-y-2">
+                          <h3 className="text-xl font-semibold">Upload resume PDF</h3>
+                          <p className="text-sm leading-7 text-muted-foreground">Analyze ATS score, strengths, weaknesses, keyword gaps, visual report insights, and easier-fit role recommendations from the uploaded profile.</p>
+                        </div>
+                        <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+                          <Input type="file" accept=".pdf,application/pdf" onChange={(event) => setUploadFile(event.target.files?.[0] || null)} />
+                          <Button onClick={handleAnalyze} disabled={loading.analyze}>
+                            {loading.analyze ? <LoadingSpinner size="sm" /> : <FileSearch className="mr-2 h-4 w-4" />}
+                            Analyze Resume
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground/80">Target job description or required skills</label>
-                      <Textarea
-                        rows={6}
-                        placeholder="Paste a job description here so the builder can sharpen keyword coverage and profile alignment."
-                        value={resume.jobDescription}
-                        onChange={(event) => setResume((current) => ({ ...current, jobDescription: event.target.value }))}
-                      />
-                    </div>
-                  </TabsContent>
+                    {analysis ? (
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <Card className={softPanel}>
+                            <CardHeader className="p-0 pb-4"><CardTitle className="flex items-center gap-2 text-lg"><Target className="h-5 w-5 text-primary" />ATS Score</CardTitle></CardHeader>
+                            <CardContent className="space-y-4 p-0">
+                              <div className="text-5xl font-semibold">{analysis.ats_score}</div>
+                              <Progress value={analysis.ats_score} className="h-2.5" />
+                            </CardContent>
+                          </Card>
+                          <Card className={softPanel}>
+                            <CardHeader className="p-0 pb-4"><CardTitle className="text-lg">Missing keywords</CardTitle></CardHeader>
+                            <CardContent className="flex flex-wrap gap-2 p-0">
+                              {analysis.missing_keywords.length ? analysis.missing_keywords.map((item) => <Badge key={item} variant="secondary">{item}</Badge>) : <p className="text-sm text-muted-foreground">No major missing keywords detected.</p>}
+                            </CardContent>
+                          </Card>
+                        </div>
+                        <div className="grid gap-4 xl:grid-cols-3">
+                          {[
+                            { title: 'Strengths', items: analysis.strengths },
+                            { title: 'Weaknesses', items: analysis.weaknesses },
+                            { title: 'Suggestions', items: analysis.suggestions },
+                          ].map((section) => (
+                            <Card key={section.title} className={softPanel}>
+                              <CardHeader className="p-0 pb-4"><CardTitle className="text-lg">{section.title}</CardTitle></CardHeader>
+                              <CardContent className="space-y-3 p-0">
+                                {section.items.map((item) => <div key={item} className={cn('rounded-2xl border px-4 py-3 text-sm leading-6', darkTheme ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white')}>{item}</div>)}
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
 
-                  <TabsContent value="experience" className="mt-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold text-foreground">Professional experience</h3>
-                        <p className="text-sm text-muted-foreground">Use action verbs and numbers wherever possible.</p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={addExperience}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add experience
-                      </Button>
-                    </div>
+                        <div className="grid gap-4 xl:grid-cols-2">
+                          <Card className={softPanel}>
+                            <CardHeader className="p-0 pb-4">
+                              <CardTitle className="text-lg">ATS report chart</CardTitle>
+                              <CardDescription>Quick visual breakdown of score strength, keyword alignment, content depth, and profile risk.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="h-[280px] p-0">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={atsBreakdown}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkTheme ? '#334155' : '#cbd5e1'} />
+                                  <XAxis
+                                    dataKey="name"
+                                    interval={0}
+                                    height={58}
+                                    tick={{ fill: darkTheme ? '#cbd5e1' : '#475569', fontSize: 11 }}
+                                    tickFormatter={wrapChartLabel}
+                                    axisLine={false}
+                                    tickLine={false}
+                                  />
+                                  <YAxis tick={{ fill: darkTheme ? '#cbd5e1' : '#475569', fontSize: 12 }} axisLine={false} tickLine={false} domain={[0, 100]} />
+                                  <Tooltip
+                                    cursor={{ fill: darkTheme ? 'rgba(148,163,184,0.12)' : 'rgba(148,163,184,0.08)' }}
+                                    formatter={(value) => [`${value}`, 'Score']}
+                                    labelFormatter={(label) => String(label).replace(/\s+/g, ' ')}
+                                    contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #d4d4d8', color: '#000000' }}
+                                    labelStyle={{ color: '#000000', fontWeight: 600 }}
+                                    itemStyle={{ color: '#000000' }}
+                                  />
+                                  <Bar dataKey="value" radius={[10, 10, 0, 0]} fill={themePreview.primary} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </CardContent>
+                          </Card>
 
-                    {resume.experience.map((item) => (
-                      <Card key={item.id} className={nestedCardClass}>
-                        <CardContent className="space-y-4 p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="grid flex-1 gap-4 md:grid-cols-2">
-                              <Input placeholder="Role title" value={item.title} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                experience: current.experience.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry),
-                              }))} />
-                              <Input placeholder="Company" value={item.company} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                experience: current.experience.map((entry) => entry.id === item.id ? { ...entry, company: event.target.value } : entry),
-                              }))} />
-                              <Input placeholder="Location" value={item.location} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                experience: current.experience.map((entry) => entry.id === item.id ? { ...entry, location: event.target.value } : entry),
-                              }))} />
-                              <div className="grid gap-4 md:grid-cols-2">
-                                <Input placeholder="Start date" value={item.startDate} onChange={(event) => setResume((current) => ({
-                                  ...current,
-                                  experience: current.experience.map((entry) => entry.id === item.id ? { ...entry, startDate: event.target.value } : entry),
-                                }))} />
-                                <Input placeholder="End date / Present" value={item.current ? 'Present' : item.endDate} onChange={(event) => setResume((current) => ({
-                                  ...current,
-                                  experience: current.experience.map((entry) => entry.id === item.id ? { ...entry, current: event.target.value.toLowerCase() === 'present', endDate: event.target.value.toLowerCase() === 'present' ? '' : event.target.value } : entry),
-                                }))} />
+                          <Card className={softPanel}>
+                            <CardHeader className="p-0 pb-4">
+                              <CardTitle className="text-lg">Feedback distribution</CardTitle>
+                              <CardDescription>See where the report is concentrated so users understand what needs attention first.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="grid gap-4 p-0 lg:grid-cols-[minmax(0,1fr)_180px]">
+                              <div className="h-[280px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <PieChart>
+                                    <Pie data={feedbackDistribution} dataKey="value" nameKey="name" innerRadius={52} outerRadius={88} paddingAngle={4}>
+                                      {feedbackDistribution.map((entry) => (
+                                        <Cell key={entry.name} fill={entry.color} />
+                                      ))}
+                                    </Pie>
+                                    <Tooltip formatter={(value, name) => [`${name}: ${value}`, '']} />
+                                  </PieChart>
+                                </ResponsiveContainer>
                               </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setResume((current) => ({
-                                ...current,
-                                experience: current.experience.filter((entry) => entry.id !== item.id),
-                              }))}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <Textarea
-                            rows={5}
-                            placeholder="Write 3-4 bullets, one line each. Example: Improved response time by 30% by optimizing SQL queries."
-                            value={item.bullets}
-                            onChange={(event) => setResume((current) => ({
-                              ...current,
-                              experience: current.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: event.target.value } : entry),
-                            }))}
-                          />
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </TabsContent>
+                              <div className="grid gap-2 self-center">
+                                {feedbackDistribution.map((entry) => (
+                                  <div key={entry.name} className={cn('rounded-xl border px-3 py-2.5', darkTheme ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white')}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                                      <p className="text-xs font-medium leading-5">{entry.name}</p>
+                                    </div>
+                                    <p className="mt-1 text-base font-semibold">{entry.value}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
 
-                  <TabsContent value="projects" className="mt-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold text-foreground">Projects</h3>
-                        <p className="text-sm text-muted-foreground">Projects help freshers and early-career candidates look stronger.</p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={addProject}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add project
+                        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                          <Card className={softPanel}>
+                            <CardHeader className="p-0 pb-4">
+                              <CardTitle className="flex items-center gap-2 text-lg">
+                                <TrendingUp className="h-5 w-5 text-primary" />
+                                Recommended roles from this profile
+                              </CardTitle>
+                              <CardDescription>Roles this profile is more likely to get shortlisted for based on resume keywords, skill signals, and general accessibility.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4 p-0">
+                              {recommendedRoles.map((role) => (
+                                <div key={role.id} className={cn('rounded-3xl border p-4', darkTheme ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white')}>
+                                  <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-lg font-semibold">{role.label}</p>
+                                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{role.why}</p>
+                                    </div>
+                                    <Badge variant="secondary">Fit score {role.score}</Badge>
+                                  </div>
+                                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                                    <div>
+                                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Growth</p>
+                                      <p className="mt-2 font-medium">{role.growthRate}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Remote share</p>
+                                      <p className="mt-2 font-medium">{role.remoteShare}%</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Matched keywords</p>
+                                      <p className="mt-2 font-medium">{role.matchedKeywords}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+
+                          <Card className={softPanel}>
+                            <CardHeader className="p-0 pb-4">
+                              <CardTitle className="text-lg">Trending now</CardTitle>
+                              <CardDescription>Roles showing stronger demand signals in the app’s market insight data right now.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3 p-0">
+                              {trendingRoles.map((role, index) => (
+                                <div key={role.id} className={cn('rounded-2xl border px-4 py-4', darkTheme ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white')}>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="font-semibold">{index + 1}. {role.label}</p>
+                                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{role.trend}</p>
+                                    </div>
+                                    <Badge variant="secondary">{role.growthRate}</Badge>
+                                  </div>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </TabsContent>
+                  <TabsContent value="build" className="space-y-6">
+                    <Card className={softPanel}>
+                      <CardHeader className="p-0 pb-5">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                          <div>
+                            <CardTitle className="text-xl">Professional resume builder</CardTitle>
+                            <CardDescription>Personal info, summary, experience, projects, education, certifications, achievements, languages, interests, and custom sections.</CardDescription>
+                          </div>
+                          <Button variant="outline" onClick={handleResetBuilder}>
+                            Reset Builder
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-6 p-0">
+                        <div className="grid gap-5 md:grid-cols-2">
+                          {[
+                            ['Name', 'name'],
+                            ['Email', 'email'],
+                            ['Phone', 'phone'],
+                            ['Location', 'location'],
+                            ['LinkedIn', 'linkedin'],
+                            ['Portfolio', 'portfolio'],
+                          ].map(([label, key]) => (
+                            <div key={key}>
+                              <p className="mb-2 text-sm font-medium">{label}</p>
+                              <Input value={buildForm.personalInfo[key as keyof PersonalInfo]} onChange={(event) => setBuildForm((current) => ({ ...current, personalInfo: { ...current.personalInfo, [key]: event.target.value } }))} />
+                            </div>
+                          ))}
+                          <div className="md:col-span-2">
+                            <p className="mb-2 text-sm font-medium">Headline</p>
+                            <Input value={buildForm.personalInfo.headline} onChange={(event) => setBuildForm((current) => ({ ...current, personalInfo: { ...current.personalInfo, headline: event.target.value } }))} />
+                          </div>
+                        </div>
+
+                        <div className="grid gap-5 md:grid-cols-2">
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Target role</p>
+                            <Input value={buildForm.targetRole} onChange={(event) => setBuildForm((current) => ({ ...current, targetRole: event.target.value }))} />
+                          </div>
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Core skills</p>
+                            <Input value={buildForm.coreSkills} onChange={(event) => setBuildForm((current) => ({ ...current, coreSkills: event.target.value }))} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Professional summary</p>
+                          <Textarea className="min-h-[150px]" value={buildForm.summary} onChange={(event) => setBuildForm((current) => ({ ...current, summary: event.target.value }))} />
+                        </div>
+
+                        <div className="grid gap-5 lg:grid-cols-2">
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Technical skills</p>
+                            <Textarea className="min-h-[120px]" value={buildForm.technicalSkills} onChange={(event) => setBuildForm((current) => ({ ...current, technicalSkills: event.target.value }))} />
+                          </div>
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Tools & platforms</p>
+                            <Textarea className="min-h-[120px]" value={buildForm.tools} onChange={(event) => setBuildForm((current) => ({ ...current, tools: event.target.value }))} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Job description for targeting</p>
+                          <Textarea className="min-h-[170px]" value={buildForm.jobDescription} onChange={(event) => setBuildForm((current) => ({ ...current, jobDescription: event.target.value }))} />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {renderSectionEditor('Experience', buildForm.experience, 'experience', 'experience')}
+                    {renderSectionEditor('Projects', buildForm.projects, 'projects', 'project')}
+                    {renderSectionEditor('Education', buildForm.education, 'education', 'education')}
+                    {renderSectionEditor('Certifications', buildForm.certifications, 'certifications', 'certification')}
+
+                    <Card className={softPanel}>
+                      <CardHeader className="p-0 pb-5"><CardTitle className="text-xl">Additional professional sections</CardTitle></CardHeader>
+                      <CardContent className="grid gap-5 p-0 lg:grid-cols-3">
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Achievements</p>
+                          <Textarea className="min-h-[150px]" value={buildForm.achievements} onChange={(event) => setBuildForm((current) => ({ ...current, achievements: event.target.value }))} />
+                        </div>
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Languages</p>
+                          <Textarea className="min-h-[150px]" value={buildForm.languages} onChange={(event) => setBuildForm((current) => ({ ...current, languages: event.target.value }))} />
+                        </div>
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Interests</p>
+                          <Textarea className="min-h-[150px]" value={buildForm.interests} onChange={(event) => setBuildForm((current) => ({ ...current, interests: event.target.value }))} />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className={softPanel}>
+                      <CardHeader className="p-0 pb-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <CardTitle className="text-xl">Custom sections</CardTitle>
+                            <CardDescription>Add any extra resume block you want at the end, such as volunteering, publications, leadership, or workshops.</CardDescription>
+                          </div>
+                          <Button variant="outline" onClick={() => setBuildForm((current) => ({ ...current, customSections: [...current.customSections, { id: createId('custom'), title: '', items: [''] }] }))}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Custom Section
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-5 p-0">
+                        {buildForm.customSections.length === 0 ? <p className="text-sm text-muted-foreground">No custom section added yet.</p> : null}
+                        {buildForm.customSections.map((section) => (
+                          <div key={section.id} className={cn('rounded-3xl border p-5', darkTheme ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white')}>
+                            <Input placeholder="Custom section title" value={section.title} onChange={(event) => setBuildForm((current) => ({ ...current, customSections: current.customSections.map((item) => item.id === section.id ? { ...item, title: event.target.value } : item) }))} />
+                            <Textarea className="mt-4 min-h-[130px]" placeholder="One item per line" value={section.items.join('\n')} onChange={(event) => setBuildForm((current) => ({ ...current, customSections: current.customSections.map((item) => item.id === section.id ? { ...item, items: event.target.value.split('\n') } : item) }))} />
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+
+                    <div className="flex flex-wrap gap-4">
+                      <Button onClick={handleGenerate} disabled={loading.generate} size="lg">
+                        {loading.generate ? <LoadingSpinner size="sm" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                        Generate Resume
                       </Button>
-                    </div>
-
-                    {resume.projects.map((item) => (
-                      <Card key={item.id} className={nestedCardClass}>
-                        <CardContent className="space-y-4 p-4">
-                          <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
-                            <Input placeholder="Project name" value={item.name} onChange={(event) => setResume((current) => ({
-                              ...current,
-                              projects: current.projects.map((entry) => entry.id === item.id ? { ...entry, name: event.target.value } : entry),
-                            }))} />
-                            <Input placeholder="Tech stack" value={item.techStack} onChange={(event) => setResume((current) => ({
-                              ...current,
-                              projects: current.projects.map((entry) => entry.id === item.id ? { ...entry, techStack: event.target.value } : entry),
-                            }))} />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setResume((current) => ({
-                                ...current,
-                                projects: current.projects.filter((entry) => entry.id !== item.id),
-                              }))}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <Textarea
-                            rows={4}
-                            placeholder="Describe impact, technologies, and results."
-                            value={item.bullets}
-                            onChange={(event) => setResume((current) => ({
-                              ...current,
-                              projects: current.projects.map((entry) => entry.id === item.id ? { ...entry, bullets: event.target.value } : entry),
-                            }))}
-                          />
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </TabsContent>
-                  <TabsContent value="qualifications" className="mt-6 space-y-6">
-                    <div className="grid gap-6 lg:grid-cols-2">
-                      <Card className={nestedCardClass}>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Skills and tools</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="space-y-3">
-                            <label className="text-sm font-medium text-foreground/80">Skills</label>
-                            <div className="flex gap-2">
-                              <Input
-                                placeholder="Add a skill"
-                                value={newSkill}
-                                onChange={(event) => setNewSkill(event.target.value)}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault();
-                                    if (newSkill.trim()) {
-                                      setResume((current) => ({ ...current, skills: unique([...current.skills, newSkill]) }));
-                                      setNewSkill('');
-                                    }
-                                  }
-                                }}
-                              />
-                              <Button variant="outline" onClick={() => {
-                                if (newSkill.trim()) {
-                                  setResume((current) => ({ ...current, skills: unique([...current.skills, newSkill]) }));
-                                  setNewSkill('');
-                                }
-                              }}>
-                                Add
-                              </Button>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {resume.skills.map((skill) => (
-                                <Badge key={skill} variant="secondary" className="gap-2 px-3 py-1">
-                                  {skill}
-                                  <button
-                                    type="button"
-                                    onClick={() => setResume((current) => ({
-                                      ...current,
-                                      skills: current.skills.filter((item) => item !== skill),
-                                    }))}
-                                  >
-                                    x
-                                  </button>
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="space-y-3">
-                            <label className="text-sm font-medium text-foreground/80">Tools</label>
-                            <div className="flex gap-2">
-                              <Input
-                                placeholder="Add a tool"
-                                value={newTool}
-                                onChange={(event) => setNewTool(event.target.value)}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault();
-                                    if (newTool.trim()) {
-                                      setResume((current) => ({ ...current, tools: unique([...current.tools, newTool]) }));
-                                      setNewTool('');
-                                    }
-                                  }
-                                }}
-                              />
-                              <Button variant="outline" onClick={() => {
-                                if (newTool.trim()) {
-                                  setResume((current) => ({ ...current, tools: unique([...current.tools, newTool]) }));
-                                  setNewTool('');
-                                }
-                              }}>
-                                Add
-                              </Button>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {resume.tools.map((tool) => (
-                                <Badge key={tool} variant="outline" className="gap-2 px-3 py-1">
-                                  {tool}
-                                  <button
-                                    type="button"
-                                    onClick={() => setResume((current) => ({
-                                      ...current,
-                                      tools: current.tools.filter((item) => item !== tool),
-                                    }))}
-                                  >
-                                    x
-                                  </button>
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium text-foreground/80">Technical stack</label>
-                            <Textarea
-                              rows={4}
-                              value={resume.technicalSkills}
-                              onChange={(event) => setResume((current) => ({ ...current, technicalSkills: event.target.value }))}
-                            />
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card className={nestedCardClass}>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Achievements and keywords</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium text-foreground/80">Achievements</label>
-                            <Textarea
-                              rows={5}
-                              value={resume.achievements.join('\n')}
-                              onChange={(event) => setAchievementsFromText(event.target.value)}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium text-foreground/80">ATS keyword bank</label>
-                            <Textarea
-                              rows={4}
-                              value={resume.keywordBlock}
-                              onChange={(event) => setResume((current) => ({ ...current, keywordBlock: event.target.value }))}
-                            />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    <div className="grid gap-6 lg:grid-cols-2">
-                      <Card className={nestedCardClass}>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                          <div>
-                            <CardTitle className="text-lg">Education</CardTitle>
-                            <CardDescription>Add degrees, college, or training.</CardDescription>
-                          </div>
-                          <Button variant="outline" size="sm" onClick={addEducation}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add
-                          </Button>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          {resume.education.map((item) => (
-                            <div key={item.id} className="grid gap-3 md:grid-cols-[1fr_1fr_110px_auto]">
-                              <Input placeholder="School" value={item.school} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                education: current.education.map((entry) => entry.id === item.id ? { ...entry, school: event.target.value } : entry),
-                              }))} />
-                              <Input placeholder="Degree" value={item.degree} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                education: current.education.map((entry) => entry.id === item.id ? { ...entry, degree: event.target.value } : entry),
-                              }))} />
-                              <Input placeholder="Year" value={item.year} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                education: current.education.map((entry) => entry.id === item.id ? { ...entry, year: event.target.value } : entry),
-                              }))} />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setResume((current) => ({
-                                  ...current,
-                                  education: current.education.filter((entry) => entry.id !== item.id),
-                                }))}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </CardContent>
-                      </Card>
-
-                      <Card className={nestedCardClass}>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                          <div>
-                            <CardTitle className="text-lg">Certifications</CardTitle>
-                            <CardDescription>Optional, but helpful for credibility.</CardDescription>
-                          </div>
-                          <Button variant="outline" size="sm" onClick={addCertification}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add
-                          </Button>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          {resume.certifications.map((item) => (
-                            <div key={item.id} className="grid gap-3 md:grid-cols-[1fr_1fr_110px_auto]">
-                              <Input placeholder="Certification" value={item.name} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                certifications: current.certifications.map((entry) => entry.id === item.id ? { ...entry, name: event.target.value } : entry),
-                              }))} />
-                              <Input placeholder="Issuer" value={item.issuer} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                certifications: current.certifications.map((entry) => entry.id === item.id ? { ...entry, issuer: event.target.value } : entry),
-                              }))} />
-                              <Input placeholder="Year" value={item.year} onChange={(event) => setResume((current) => ({
-                                ...current,
-                                certifications: current.certifications.map((entry) => entry.id === item.id ? { ...entry, year: event.target.value } : entry),
-                              }))} />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setResume((current) => ({
-                                  ...current,
-                                  certifications: current.certifications.filter((entry) => entry.id !== item.id),
-                                }))}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </CardContent>
-                      </Card>
+                      <Button onClick={handleImprove} disabled={loading.improve} size="lg" variant="outline">
+                        {loading.improve ? <LoadingSpinner size="sm" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                        Improve Resume
+                      </Button>
                     </div>
                   </TabsContent>
                 </Tabs>
@@ -1838,280 +1007,38 @@ const ResumeBuilder = () => {
             </Card>
           </AnimatedSection>
 
-          <div className="space-y-6">
-            <AnimatedSection delay={0.1}>
-              <Card className={heroCardClass}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-xl">
-                    <Target className="h-5 w-5 text-primary" />
-                    ATS scorecard
-                  </CardTitle>
-                  <CardDescription>
-                    Live feedback based on structure, keywords, impact, and professional polish.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                  <div className={metricCardClass}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Overall score</p>
-                        <p className="mt-2 text-4xl font-semibold">{ats.overall}</p>
-                      </div>
-                      <Badge className={`${qualityTone.bar} border-0 text-white`}>{qualityTone.label}</Badge>
-                    </div>
-                    <Progress value={ats.overall} className="mt-4 h-2" />
-                  </div>
-
-                  {[
-                    ['Keyword match', ats.keywordMatch],
-                    ['Structure', ats.structure],
-                    ['Impact', ats.impact],
-                    ['Readability', ats.readability],
-                    ['Professionalism', ats.professionalism],
-                  ].map(([label, value]) => (
-                    <div key={label} className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{label}</span>
-                        <span className="font-medium text-foreground">{value}%</span>
-                      </div>
-                      <Progress value={Number(value)} className="h-2" />
-                    </div>
-                  ))}
-
-                  <Separator className="bg-border/80" />
-
-                  <div className="space-y-3">
-                    <p className="text-sm font-medium text-foreground">Profile-specific guidance</p>
-                    <div className="flex flex-wrap gap-2">
-                      {ats.matchedKeywords.slice(0, 10).map((keyword) => (
-                        <Badge key={keyword} className="border border-primary/25 bg-primary/10 text-primary hover:bg-primary/10">
-                          {keyword}
-                        </Badge>
-                      ))}
-                      {ats.matchedKeywords.length === 0 && (
-                        <p className="text-sm text-muted-foreground">Add role-specific keywords and run the auto improve action.</p>
-                      )}
-                    </div>
-                    {ats.missingKeywords.length > 0 && (
-                      <p className="text-sm text-amber-600 dark:text-amber-300">
-                        Missing important keywords: {ats.missingKeywords.slice(0, 6).join(', ')}
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </AnimatedSection>
-
+          {activeTab === 'build' ? (
             <AnimatedSection delay={0.12}>
-              <Card className={mainCardClass}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-xl">
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
-                    Resume improvement plan
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {ats.suggestions.map((suggestion) => (
-                    <div key={suggestion} className={subtlePanelClass}>
-                      {suggestion}
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </AnimatedSection>
-
-            <AnimatedSection delay={0.15}>
-              <Card className={mainCardClass}>
-                <CardHeader>
-                  <CardTitle className="text-xl">Live resume preview</CardTitle>
-                  <CardDescription>
-                    A clean, ATS-safe layout with professional structure and export-friendly content.
-                  </CardDescription>
+              <Card className={cardClass}>
+                <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle>Live preview</CardTitle>
+                    <CardDescription>Visible only while building the resume and styled to match the current theme.</CardDescription>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <Select value={template} onValueChange={(value) => setTemplate(value as ResumeTemplateId)}>
+                      <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TEMPLATE_OPTIONS.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={handleDownload} disabled={loading.download}>
+                      {loading.download ? <LoadingSpinner size="sm" /> : <Download className="mr-2 h-4 w-4" />}
+                      Download PDF
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className={cn('h-[900px] rounded-2xl border p-3', darkTheme ? 'border-primary/10 bg-background/50' : 'border-border bg-muted/60')}>
-                    <motion.div
-                      key={`${template}-${selectedRole}-${resume.personal.headline}`}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, ease: 'easeOut' }}
-                      className={`mx-auto max-w-[820px] rounded-[28px] p-8 sm:p-10 ${templateShell}`}
-                    >
-                      <header className="space-y-3 border-b pb-6">
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                          <div className="space-y-2">
-                            <h2 className="text-3xl font-semibold tracking-tight">{resume.personal.name}</h2>
-                            <p className={`text-sm font-medium ${previewMuted}`}>{resume.personal.headline}</p>
-                          </div>
-                          <div className={`space-y-1 text-sm ${previewMuted}`}>
-                            <p>{resume.personal.email}</p>
-                            <p>{resume.personal.phone}</p>
-                            <p>{resume.personal.location}</p>
-                            <p>{resume.personal.linkedin}</p>
-                            <p>{resume.personal.portfolio}</p>
-                          </div>
-                        </div>
-                      </header>
-
-                      <div className="mt-6 space-y-6 text-sm leading-6">
-                        <section className="space-y-2">
-                          <h3 className={`border-b pb-2 text-xs font-semibold uppercase tracking-[0.22em] ${previewHeading}`}>Professional summary</h3>
-                          <p className={previewMuted}>{resume.summary}</p>
-                        </section>
-
-                        <section className="space-y-3">
-                          <h3 className={`border-b pb-2 text-xs font-semibold uppercase tracking-[0.22em] ${previewHeading}`}>Core skills</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {resume.skills.map((skill) => (
-                              <span
-                                key={skill}
-                                className={`rounded-full px-3 py-1 text-xs ${
-                                  template === 'modern'
-                                    ? 'bg-primary/10 text-primary'
-                                    : template === 'executive'
-                                    ? 'bg-slate-100 text-slate-700'
-                                    : 'bg-stone-200 text-stone-800'
-                                }`}
-                              >
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                          <p className={previewMuted}>
-                            <span className="font-semibold">Technical:</span> {resume.technicalSkills}
-                          </p>
-                          <p className={previewMuted}>
-                            <span className="font-semibold">Tools:</span> {resume.tools.join(', ')}
-                          </p>
-                        </section>
-                        <section className="space-y-3">
-                          <h3 className={`border-b pb-2 text-xs font-semibold uppercase tracking-[0.22em] ${previewHeading}`}>Professional experience</h3>
-                          {resume.experience.map((item) => (
-                            <div key={item.id} className="space-y-2">
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div>
-                                  <p className="font-semibold">{item.title}</p>
-                                  <p className={previewMuted}>
-                                    {item.company} {item.location ? `| ${item.location}` : ''}
-                                  </p>
-                                </div>
-                                <p className={previewMuted}>
-                                  {item.startDate} - {item.current ? 'Present' : item.endDate}
-                                </p>
-                              </div>
-                              <ul className={`list-disc space-y-1 pl-5 ${previewMuted}`}>
-                                {splitLines(item.bullets).map((bullet) => (
-                                  <li key={`${item.id}-${bullet}`}>{bullet}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
-                        </section>
-
-                        <section className="space-y-3">
-                          <h3 className={`border-b pb-2 text-xs font-semibold uppercase tracking-[0.22em] ${previewHeading}`}>Projects</h3>
-                          {resume.projects.map((item) => (
-                            <div key={item.id} className="space-y-2">
-                              <div>
-                                <p className="font-semibold">{item.name}</p>
-                                <p className={previewMuted}>{item.techStack}</p>
-                              </div>
-                              <ul className={`list-disc space-y-1 pl-5 ${previewMuted}`}>
-                                {splitLines(item.bullets).map((bullet) => (
-                                  <li key={`${item.id}-${bullet}`}>{bullet}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
-                        </section>
-
-                        {!!resume.achievements.length && (
-                          <section className="space-y-3">
-                            <h3 className={`border-b pb-2 text-xs font-semibold uppercase tracking-[0.22em] ${previewHeading}`}>Achievements</h3>
-                            <ul className={`list-disc space-y-1 pl-5 ${previewMuted}`}>
-                              {resume.achievements.map((item) => (
-                                <li key={item}>{item}</li>
-                              ))}
-                            </ul>
-                          </section>
-                        )}
-
-                        <section className="grid gap-6 md:grid-cols-2">
-                          <div className="space-y-3">
-                            <h3 className={`border-b pb-2 text-xs font-semibold uppercase tracking-[0.22em] ${previewHeading}`}>Education</h3>
-                            {resume.education.map((item) => (
-                              <div key={item.id}>
-                                <p className="font-semibold">{item.school}</p>
-                                <p className={previewMuted}>
-                                  {item.degree} | {item.year}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="space-y-3">
-                            <h3 className={`border-b pb-2 text-xs font-semibold uppercase tracking-[0.22em] ${previewHeading}`}>Certifications</h3>
-                            {resume.certifications.length ? (
-                              resume.certifications.map((item) => (
-                                <div key={item.id}>
-                                  <p className="font-semibold">{item.name}</p>
-                                  <p className={previewMuted}>
-                                    {item.issuer} | {item.year}
-                                  </p>
-                                </div>
-                              ))
-                            ) : (
-                              <p className={previewMuted}>Optional. Add certifications to strengthen credibility.</p>
-                            )}
-                          </div>
-                        </section>
-                      </div>
-                    </motion.div>
+                  <ScrollArea className={cn('h-[calc(100vh-210px)] min-h-[820px] rounded-[28px] border p-4', darkTheme ? 'border-white/10 bg-black/10' : 'border-slate-200 bg-slate-100/80')}>
+                    <div ref={previewRef}>
+                      <ResumePreview resume={deferredPreview || EMPTY_PREVIEW} template={template} darkTheme={darkTheme} accentColor={themePreview.primary} exportMode={exportMode} />
+                    </div>
                   </ScrollArea>
                 </CardContent>
               </Card>
             </AnimatedSection>
-          </div>
+          ) : null}
         </div>
-
-        <AnimatedSection delay={0.18}>
-          <Card className={heroCardClass}>
-            <CardContent className="grid gap-6 p-6 md:grid-cols-3">
-              <div className={metricCardClass}>
-                <div className="mb-3 flex items-center gap-2">
-                  <Briefcase className="h-5 w-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Profile-aware content</h3>
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  The builder now changes summaries, keywords, skills, and sample bullets based on the selected profile so
-                  the resume looks specific instead of generic.
-                </p>
-              </div>
-
-              <div className={metricCardClass}>
-                <div className="mb-3 flex items-center gap-2">
-                  <FolderKanban className="h-5 w-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Professional structure</h3>
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  The layout is cleaner, one-column, ATS-safe, and ready for both freshers and experienced candidates with
-                  sections for projects, achievements, tools, and certifications.
-                </p>
-              </div>
-
-              <div className={metricCardClass}>
-                <div className="mb-3 flex items-center gap-2">
-                  <GraduationCap className="h-5 w-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Real downloads</h3>
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  PDF and Word download buttons now generate actual files from the same structured resume data shown in the
-                  preview.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </AnimatedSection>
       </div>
     </div>
   );

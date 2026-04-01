@@ -58,25 +58,53 @@ AI_Powered-Job-Finder/
 
 ```env
 PORT=5000
-NODE_ENV=development
+NODE_ENV=production
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<db>
-JWT_SECRET=your-strong-secret
-FRONTEND_URL=http://localhost:5173
+JWT_SECRET=replace_with_a_long_random_secret
+JWT_EXPIRES_IN=7d
+FRONTEND_URL=https://your-frontend-domain.com
+
+# Optional but recommended operational settings
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=2000
+
+# Optional email settings
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+FROM=
+FROM_NAME=JobFinder AI
+
+# Optional asset storage
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+
+# Optional job aggregation
+ADZUNA_APP_ID=
+ADZUNA_APP_KEY=
+ADZUNA_COUNTRY=in
+
+# Optional translation / TTS support
+GOOGLE_APPLICATION_CREDENTIALS=
+GOOGLE_TTS_LANGUAGE=hi-IN
+GOOGLE_TTS_VOICE=hi-IN-Wavenet-A
 
 # Optional AI integrations
 GROQ_API_KEY=
 GROQ_MODEL=llama-3.1-8b-instant
-WHISPER_SERVICE_URL=http://localhost:8000
+WHISPER_SERVICE_URL=https://your-whisper-service-domain.com
 
-# Optional email settings
-SMTP_USER=
-SMTP_PASS=
+# Admin seed credentials
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=change_me
 ```
 
 ### Frontend (client/.env)
 
 ```env
-VITE_API_URL=http://localhost:5000/api
+VITE_API_URL=https://your-backend-domain.com/api
 ```
 
 ### Whisper Service (services/whisper/.env optional)

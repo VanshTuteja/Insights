@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, RotateCw, Star, Quote } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
+import { hexToRgba, mixHex } from '@/lib/themeColorUtils';
+import { cn } from '@/lib/utils';
 
 interface TestimonialItem {
   id: string;
@@ -16,8 +20,9 @@ interface TestimonialItem {
 const TestimonialCarousel: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipping, setIsFlipping] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState(0);
-
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
 
 
  const testimonials: TestimonialItem[] = [
@@ -94,9 +99,6 @@ const TestimonialCarousel: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-cycle through themes
-
-
   const getCubeStyle = (index: number) => {
     const position = (index - currentIndex + testimonials.length) % testimonials.length;
     const totalItems = testimonials.length;
@@ -136,32 +138,48 @@ const TestimonialCarousel: React.FC = () => {
   };
 
   return (
-    <section className={`py-20  transition-all duration-1000`}>
+    <section className="py-20 transition-all duration-1000">
       <div className="container mx-auto px-4">
         {/* Section Header */}
         <div className="text-center space-y-4 mb-16">
-          <h2 className={`text-3xl md:text-4xl font-bold`}>
+          <h2 className="text-3xl md:text-4xl font-bold">
             Loved by{' '}
-            <span className={`bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent`}>
+            <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
               Professionals
             </span>
           </h2>
-          <p className={`text-lg`}>
+          <p className="text-lg text-muted-foreground">
             See what our users say about their experience
           </p>
         </div>
 
 
         {/* Main Testimonial Carousel */}
-        <div className={`w-full h-screen flex flex-col items-center justify-center overflow-hidden relative rounded-3xl transition-all duration-1000`}>
+        <div
+          className="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden rounded-3xl border transition-all duration-1000"
+          style={{
+            background: darkTheme
+              ? `linear-gradient(160deg, ${hexToRgba(mixHex(themePreview.primary, '#0f172a', 0.55), 0.82)} 0%, ${hexToRgba(themePreview.secondary, 0.98)} 100%)`
+              : `linear-gradient(160deg, ${hexToRgba(mixHex(themePreview.primary, '#ffffff', 0.18), 0.18)} 0%, ${hexToRgba(mixHex(themePreview.secondary, '#ffffff', 0.72), 0.96)} 100%)`,
+            borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.2) : hexToRgba(themePreview.primary, 0.12),
+          }}
+        >
+          <div
+            className="absolute inset-0"
+            style={{
+              background: darkTheme
+                ? 'radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 50%)'
+                : 'radial-gradient(circle at top, rgba(255,255,255,0.55), transparent 52%)',
+            }}
+          />
           {/* Title */}
-          <div className="mb-8 text-center">
-            <h3 className={`text-3xl font-bold mb-2`}>Customer Stories</h3>
-            <p>Interactive testimonial showcase</p>
+          <div className="relative mb-8 text-center">
+            <h3 className={cn('mb-2 text-3xl font-bold', darkTheme ? 'text-white' : 'text-foreground')}>Customer Stories</h3>
+            <p className={cn(darkTheme ? 'text-white/72' : 'text-foreground/70')}>Interactive testimonial showcase</p>
           </div>
 
           {/* 3D Testimonial Carousel */}
-          <div className="relative w-full h-96 mb-8" style={{ perspective: '1000px' }}>
+          <div className="relative mb-8 h-96 w-full" style={{ perspective: '1000px' }}>
             <div className="absolute inset-0 flex items-center justify-center">
               {testimonials.map((testimonial, index) => {
                 const style = getCubeStyle(index);
@@ -179,20 +197,29 @@ const TestimonialCarousel: React.FC = () => {
                     {/* Testimonial Card */}
                     <div className="relative w-full h-full preserve-3d">
                       {/* Front Face */}
-                      <div className={`absolute inset-0 backdrop-blur-sm rounded-2xl border  shadow-2xl`}>
+                      <div
+                        className="absolute inset-0 rounded-2xl border shadow-2xl backdrop-blur-sm"
+                        style={{
+                          background: darkTheme
+                            ? `linear-gradient(180deg, ${hexToRgba(themePreview.primary, 0.16)} 0%, ${hexToRgba('#020617', 0.78)} 100%)`
+                            : `linear-gradient(180deg, ${hexToRgba(themePreview.primary, 0.12)} 0%, rgba(255,255,255,0.96) 100%)`,
+                          borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.24) : hexToRgba(themePreview.primary, 0.14),
+                        }}
+                      >
                         <div className="relative w-full h-full rounded-2xl overflow-hidden p-6 flex flex-col">
                            {/* Author Info */}
                           <div className="flex items-center space-x-3 mt-auto">
                             <img
                               src={testimonial.avatar}
                               alt={testimonial.name}
-                              className="w-12 h-12 rounded-full border-2 border-white/20"
+                              className="h-12 w-12 rounded-full border-2"
+                              style={{ borderColor: darkTheme ? 'rgba(255,255,255,0.2)' : hexToRgba(themePreview.primary, 0.16) }}
                             />
                             <div>
-                              <p className={`font-semibold `}>
+                              <p className={cn('font-semibold', darkTheme ? 'text-white' : 'text-foreground')}>
                                 {testimonial.name}
                               </p>
-                              <p className={`text-sm `}>
+                              <p className={cn('text-sm', darkTheme ? 'text-white/70' : 'text-foreground/65')}>
                                 {testimonial.role} at {testimonial.company}
                               </p>
                             </div>
@@ -201,7 +228,10 @@ const TestimonialCarousel: React.FC = () => {
                           {/* Active Indicator */}
                           {isActive && (
                             <div className="absolute top-4 right-4">
-                              <div className={`w-3 h-3 rounded-full animate-pulse shadow-lg`} />
+                              <div
+                                className="h-3 w-3 animate-pulse rounded-full shadow-lg"
+                                style={{ backgroundColor: themePreview.primary }}
+                              />
                             </div>
                           )}
 
@@ -212,7 +242,7 @@ const TestimonialCarousel: React.FC = () => {
 
                           {/* Testimonial Content */}
                           <div className="flex-1 flex flex-col justify-center">
-                            <p className={`text-lg mb-6 leading-relaxed italic`}>
+                            <p className={cn('mb-6 text-lg leading-relaxed italic', darkTheme ? 'text-white/84' : 'text-foreground/80')}>
                               "{testimonial.content}"
                             </p>
                           </div>
@@ -223,12 +253,15 @@ const TestimonialCarousel: React.FC = () => {
                       
                       {/* Side Faces for 3D Effect */}
                       <div 
-                        className="absolute inset-0 bg-gradient-to-r from-black/40 to-transparent rounded-2xl"
-                        style={{ transform: 'rotateY(90deg) translateZ(160px)' }}
+                        className="absolute inset-0 rounded-2xl"
+                        style={{
+                          background: `linear-gradient(to right, ${hexToRgba('#020617', darkTheme ? 0.35 : 0.18)} 0%, transparent 100%)`,
+                          transform: 'rotateY(90deg) translateZ(160px)',
+                        }}
                       />
                       <div 
-                        className="absolute inset-0 bg-gradient-to-l from-black/40 to-transparent rounded-2xl"
-                        style={{ transform: 'rotateY(-90deg) translateZ(160px)' }}
+                        className="absolute inset-0 rounded-2xl"
+                        style={{ background: `linear-gradient(to left, ${hexToRgba('#020617', darkTheme ? 0.35 : 0.18)} 0%, transparent 100%)`, transform: 'rotateY(-90deg) translateZ(160px)' }}
                       />
                     </div>
                   </div>
@@ -239,17 +272,58 @@ const TestimonialCarousel: React.FC = () => {
 
           {/* Current Testimonial Info */}
           <div className="text-center mb-8 min-h-[80px] flex flex-col justify-center max-w-2xl px-4">
-            <h4 className={`text-2xl font-bold  mb-2`}>
+            <h4 className={cn('mb-2 text-2xl font-bold', darkTheme ? 'text-white' : 'text-foreground')}>
               {testimonials[currentIndex].name}
             </h4>
-            <p className={` text-lg`}>
+            <p className={cn('text-lg', darkTheme ? 'text-white/72' : 'text-foreground/70')}>
               {testimonials[currentIndex].role} at {testimonials[currentIndex].company}
             </p>
           </div>
 
-        
-
-        
+          <div className="relative z-10 mb-8 flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={prevSlide}
+              className="rounded-full border"
+              style={{
+                backgroundColor: darkTheme ? hexToRgba('#ffffff', 0.08) : hexToRgba('#ffffff', 0.72),
+                borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.18) : hexToRgba(themePreview.primary, 0.16),
+              }}
+            >
+              <ChevronLeft className={cn('h-5 w-5', darkTheme ? 'text-white' : 'text-foreground')} />
+            </Button>
+            <div className="flex items-center gap-2">
+              {testimonials.map((testimonial, index) => (
+                <button
+                  key={testimonial.id}
+                  type="button"
+                  onClick={() => setCurrentIndex(index)}
+                  className="h-2.5 rounded-full transition-all duration-300"
+                  style={{
+                    width: currentIndex === index ? 28 : 10,
+                    backgroundColor: currentIndex === index
+                      ? themePreview.primary
+                      : darkTheme
+                        ? 'rgba(255,255,255,0.28)'
+                        : hexToRgba(themePreview.primary, 0.28),
+                  }}
+                />
+              ))}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={nextSlide}
+              className="rounded-full border"
+              style={{
+                backgroundColor: darkTheme ? hexToRgba('#ffffff', 0.08) : hexToRgba('#ffffff', 0.72),
+                borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.18) : hexToRgba(themePreview.primary, 0.16),
+              }}
+            >
+              <ChevronRight className={cn('h-5 w-5', darkTheme ? 'text-white' : 'text-foreground')} />
+            </Button>
+          </div>
 
           {/* Current Theme Indicator */}
           {/* <div className="absolute bottom-4 left-4">

@@ -2,34 +2,46 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Briefcase, User, MessageSquare, TrendingUp } from 'lucide-react';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
+import { hexToRgba, mixHex } from '@/lib/themeColorUtils';
+import { cn } from '@/lib/utils';
 
 const CarouselSection: React.FC = () => {
   const [currentSlide, setCurrentSlide] = React.useState(0);
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = React.useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
+
+  const accentStops = React.useMemo(
+    () => [
+      { start: mixHex(themePreview.primary, '#38bdf8', darkTheme ? 0.2 : 0.35), end: mixHex(themePreview.secondary, '#7c3aed', darkTheme ? 0.35 : 0.6) },
+      { start: mixHex(themePreview.primary, '#10b981', darkTheme ? 0.24 : 0.45), end: mixHex(themePreview.secondary, '#14b8a6', darkTheme ? 0.28 : 0.68) },
+      { start: mixHex(themePreview.primary, '#f97316', darkTheme ? 0.3 : 0.48), end: mixHex(themePreview.secondary, '#ef4444', darkTheme ? 0.34 : 0.66) },
+      { start: mixHex(themePreview.primary, '#8b5cf6', darkTheme ? 0.34 : 0.52), end: mixHex(themePreview.secondary, '#ec4899', darkTheme ? 0.36 : 0.72) },
+    ],
+    [darkTheme, themePreview.primary, themePreview.secondary],
+  );
 
   const slides = [
     {
       title: 'AI-Powered Job Matching',
       description: 'Get personalized job recommendations tailored to your skills and preferences.',
       icon: Briefcase,
-      gradient: 'from-blue-500 to-purple-600',
     },
     {
       title: 'Smart Resume Builder',
       description: 'Create professional resumes with AI assistance and real-time feedback.',
       icon: User,
-      gradient: 'from-green-500 to-teal-600',
     },
     {
       title: 'Interview Preparation',
       description: 'Practice with AI-driven mock interviews and get detailed feedback.',
       icon: MessageSquare,
-      gradient: 'from-orange-500 to-red-600',
     },
     {
       title: 'Career Insights',
       description: 'Access real-time salary data and market trends for informed decisions.',
       icon: TrendingUp,
-      gradient: 'from-purple-500 to-pink-600',
     },
   ];
 
@@ -47,9 +59,16 @@ const CarouselSection: React.FC = () => {
   }, []);
 
   const Icon = slides[currentSlide].icon;
+  const currentGradient = accentStops[currentSlide];
 
   return (
-    <div className="relative w-full h-96 rounded-2xl overflow-hidden">
+    <div
+      className="relative h-96 w-full overflow-hidden rounded-2xl border shadow-2xl"
+      style={{
+        borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.32) : hexToRgba(themePreview.primary, 0.14),
+        boxShadow: darkTheme ? '0 24px 60px rgba(2, 6, 23, 0.42)' : '0 24px 60px rgba(15, 23, 42, 0.12)',
+      }}
+    >
       <AnimatePresence mode="wait">
         <motion.div
           key={currentSlide}
@@ -57,15 +76,30 @@ const CarouselSection: React.FC = () => {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -300 }}
           transition={{ duration: 0.5 }}
-          className={`absolute inset-0 bg-gradient-to-br ${slides[currentSlide].gradient}`}
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(135deg, ${currentGradient.start} 0%, ${currentGradient.end} 100%)`,
+          }}
         >
-          <div className="flex items-center justify-center h-full text-white p-8">
+          <div
+            className="absolute inset-0"
+            style={{
+              background: darkTheme
+                ? 'radial-gradient(circle at top, rgba(255,255,255,0.14), transparent 52%)'
+                : 'radial-gradient(circle at top, rgba(255,255,255,0.36), transparent 54%)',
+            }}
+          />
+          <div className="flex h-full items-center justify-center p-8 text-white">
             <div className="text-center space-y-6">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ delay: 0.2, duration: 0.5 }}
-                className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center"
+                className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border"
+                style={{
+                  backgroundColor: darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.2)',
+                  borderColor: darkTheme ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.28)',
+                }}
               >
                 <Icon className="h-8 w-8" />
               </motion.div>
@@ -90,9 +124,13 @@ const CarouselSection: React.FC = () => {
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.5 }}
               >
-                <Button 
-                  variant="secondary" 
-                  className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+                <Button
+                  variant="secondary"
+                  className="border text-white"
+                  style={{
+                    backgroundColor: darkTheme ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.18)',
+                    borderColor: darkTheme ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.28)',
+                  }}
                 >
                   Learn More
                 </Button>
@@ -107,7 +145,14 @@ const CarouselSection: React.FC = () => {
         variant="ghost"
         size="icon"
         onClick={prevSlide}
-        className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20"
+        className={cn(
+          'absolute left-4 top-1/2 -translate-y-1/2 rounded-full border text-white transition-colors',
+          darkTheme ? 'hover:bg-white/15' : 'hover:bg-white/25',
+        )}
+        style={{
+          backgroundColor: darkTheme ? 'rgba(15,23,42,0.18)' : 'rgba(255,255,255,0.14)',
+          borderColor: darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.24)',
+        }}
       >
         <ChevronLeft className="h-6 w-6" />
       </Button>
@@ -117,7 +162,14 @@ const CarouselSection: React.FC = () => {
         variant="ghost"
         size="icon"
         onClick={nextSlide}
-        className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20"
+        className={cn(
+          'absolute right-4 top-1/2 -translate-y-1/2 rounded-full border text-white transition-colors',
+          darkTheme ? 'hover:bg-white/15' : 'hover:bg-white/25',
+        )}
+        style={{
+          backgroundColor: darkTheme ? 'rgba(15,23,42,0.18)' : 'rgba(255,255,255,0.14)',
+          borderColor: darkTheme ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.24)',
+        }}
       >
         <ChevronRight className="h-6 w-6" />
       </Button>
@@ -129,7 +181,7 @@ const CarouselSection: React.FC = () => {
             key={index}
             onClick={() => setCurrentSlide(index)}
             className={`w-3 h-3 rounded-full transition-all ${
-              currentSlide === index ? 'bg-white' : 'bg-white/50'
+              currentSlide === index ? 'bg-white scale-110' : 'bg-white/55'
             }`}
           />
         ))}

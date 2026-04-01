@@ -4,8 +4,15 @@ import {
   Upload, Bot, CheckCircle, Download, UserPlus, Target, Zap, Star,
   Brain, Clock, Shield, Users, Rocket, Award, TrendingUp, Heart
 } from 'lucide-react';
+import { getThemePreview, isDarkTheme, useThemeStore } from '@/stores/themeStore';
+import { hexToRgba, mixHex } from '@/lib/themeColorUtils';
+import { cn } from '@/lib/utils';
 
 const CombinedAboutCarousel = () => {
+  const theme = useThemeStore((state) => state.theme);
+  const themePreview = React.useMemo(() => getThemePreview(theme), [theme]);
+  const darkTheme = isDarkTheme(theme);
+
   const howItWorks = [
     {
       step: "1",
@@ -103,9 +110,18 @@ const CombinedAboutCarousel = () => {
   // Create extended arrays for seamless looping
   const extendedSteps = [...howItWorks, ...howItWorks, ...howItWorks];
   const extendedBenefits = [...benefits, ...benefits, ...benefits];
+  const primaryGlow = mixHex(themePreview.primary, '#ffffff', darkTheme ? 0.05 : 0.18);
+  const secondaryGlow = mixHex(themePreview.secondary, '#38bdf8', darkTheme ? 0.16 : 0.3);
 
   return (
-    <div className="py-20 bg-gradient-to-br from-accent/5 to-secondary/5">
+    <div
+      className="py-20"
+      style={{
+        background: darkTheme
+          ? `linear-gradient(180deg, ${hexToRgba(themePreview.secondary, 0.18)} 0%, ${hexToRgba('#020617', 0.96)} 100%)`
+          : `linear-gradient(180deg, ${hexToRgba(themePreview.primary, 0.04)} 0%, ${hexToRgba(themePreview.secondary, 0.12)} 100%)`,
+      }}
+    >
       {/* How It Works Section */}
       <section className="mb-20">
         <div className="container mx-auto px-4">
@@ -151,7 +167,16 @@ const CombinedAboutCarousel = () => {
                 {extendedSteps.map((step, index) => (
                   <motion.div
                     key={`step-${index}`}
-                    className="flex-shrink-0 w-72 h-36 bg-gradient-to-br from-primary/10 to-secondary/10 backdrop-blur-sm border border-primary/20 rounded-xl p-5 shadow-lg hover:shadow-xl transition-all duration-300 group"
+                    className={cn(
+                      'group h-36 w-72 flex-shrink-0 rounded-xl border p-5 shadow-lg backdrop-blur-sm transition-all duration-300 hover:shadow-xl',
+                      darkTheme ? 'text-white' : 'text-foreground',
+                    )}
+                    style={{
+                      background: darkTheme
+                        ? `linear-gradient(145deg, ${hexToRgba(primaryGlow, 0.18)} 0%, ${hexToRgba(themePreview.secondary, 0.82)} 100%)`
+                        : `linear-gradient(145deg, ${hexToRgba(themePreview.primary, 0.12)} 0%, ${hexToRgba('#ffffff', 0.94)} 100%)`,
+                      borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.24) : hexToRgba(themePreview.primary, 0.16),
+                    }}
                     whileHover={{
                       scale: 1.05,
                       y: -8,
@@ -174,19 +199,30 @@ const CombinedAboutCarousel = () => {
                         <motion.div
                           whileHover={{ scale: 1.1, rotate: 360 }}
                           transition={{ duration: 0.5 }}
-                          className="w-14 h-14 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md"
+                          className="flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold text-white shadow-md"
+                          style={{
+                            background: `linear-gradient(135deg, ${themePreview.primary} 0%, ${mixHex(themePreview.secondary, '#ffffff', darkTheme ? 0.12 : 0.6)} 100%)`,
+                          }}
                         >
                           {step.step}
                         </motion.div>
                         <div className="absolute -top-1 -right-1">
-                          <step.icon className="h-5 w-5 text-primary bg-white rounded-full p-0.5" />
+                          <step.icon
+                            className="rounded-full p-0.5"
+                            style={{
+                              height: 20,
+                              width: 20,
+                              color: themePreview.primary,
+                              backgroundColor: darkTheme ? hexToRgba('#ffffff', 0.92) : '#ffffff',
+                            }}
+                          />
                         </div>
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-base font-semibold mb-2 group-hover:text-primary transition-colors">
+                        <h3 className="mb-2 text-base font-semibold transition-colors group-hover:text-primary">
                           {step.title}
                         </h3>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
+                        <p className={cn('text-sm leading-relaxed', darkTheme ? 'text-white/72' : 'text-muted-foreground')}>
                           {step.description}
                         </p>
                       </div>
@@ -244,7 +280,16 @@ const CombinedAboutCarousel = () => {
                 {extendedBenefits.map((benefit, index) => (
                   <motion.div
                     key={`benefit-${index}`}
-                    className="flex-shrink-0 w-72 h-36 bg-gradient-to-br from-accent/10 to-muted/20 backdrop-blur-sm border border-accent/20 rounded-xl p-5 shadow-lg hover:shadow-xl transition-all duration-300 group"
+                    className={cn(
+                      'group h-36 w-72 flex-shrink-0 rounded-xl border p-5 shadow-lg backdrop-blur-sm transition-all duration-300 hover:shadow-xl',
+                      darkTheme ? 'text-white' : 'text-foreground',
+                    )}
+                    style={{
+                      background: darkTheme
+                        ? `linear-gradient(145deg, ${hexToRgba(secondaryGlow, 0.16)} 0%, ${hexToRgba(themePreview.secondary, 0.76)} 100%)`
+                        : `linear-gradient(145deg, ${hexToRgba(mixHex(themePreview.primary, themePreview.secondary, 0.5), 0.1)} 0%, ${hexToRgba('#ffffff', 0.96)} 100%)`,
+                      borderColor: darkTheme ? hexToRgba(themePreview.primary, 0.2) : hexToRgba(themePreview.primary, 0.14),
+                    }}
                     whileHover={{
                       scale: 1.05,
                       y: -8,
@@ -261,16 +306,21 @@ const CombinedAboutCarousel = () => {
                         ease: "easeInOut",
                       },
                     }}
-                  >
-                    <div className="flex items-start space-x-4">
-                      <div className="w-14 h-14 bg-gradient-to-br from-accent/20 to-secondary/20 rounded-full flex items-center justify-center">
-                        <benefit.icon className="h-7 w-7 text-primary" />
+                    >
+                      <div className="flex items-start space-x-4">
+                      <div
+                        className="flex h-14 w-14 items-center justify-center rounded-full"
+                        style={{
+                          background: `linear-gradient(135deg, ${hexToRgba(themePreview.primary, darkTheme ? 0.26 : 0.14)} 0%, ${hexToRgba(themePreview.secondary, darkTheme ? 0.42 : 0.28)} 100%)`,
+                        }}
+                      >
+                        <benefit.icon className="h-7 w-7" style={{ color: themePreview.primary }} />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-base font-semibold mb-2 group-hover:text-secondary transition-colors">
+                        <h3 className="mb-2 text-base font-semibold transition-colors group-hover:text-primary">
                           {benefit.title}
                         </h3>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
+                        <p className={cn('text-sm leading-relaxed', darkTheme ? 'text-white/72' : 'text-muted-foreground')}>
                           {benefit.description}
                         </p>
                       </div>
@@ -294,7 +344,10 @@ const CombinedAboutCarousel = () => {
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="bg-gradient-to-r from-primary to-secondary text-white px-10 py-4 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300 text-lg"
+          className="rounded-full px-10 py-4 text-lg font-semibold text-white shadow-lg transition-all duration-300 hover:shadow-xl"
+          style={{
+            background: `linear-gradient(135deg, ${themePreview.primary} 0%, ${mixHex(themePreview.secondary, '#ffffff', darkTheme ? 0.1 : 0.55)} 100%)`,
+          }}
         >
           Get Started Today
         </motion.button>

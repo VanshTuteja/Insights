@@ -89,10 +89,10 @@ export interface FinalInterviewReport {
 }
 
 export interface ResumeImprovePayload {
-  roleLabel: string;
+  roleLabel?: string;
   jobDescription?: string;
-  resume: {
-    personal: {
+  resume?: {
+    personal?: {
       name?: string;
       email?: string;
       phone?: string;
@@ -132,6 +132,7 @@ export interface ResumeImprovePayload {
       year?: string;
     }>;
   };
+  text?: string;
 }
 
 export interface ResumeImproveResult {
@@ -144,6 +145,49 @@ export interface ResumeImproveResult {
   keywordBlock: string;
   experience: Array<{ bullets: string[] }>;
   projects: Array<{ bullets: string[] }>;
+}
+
+export interface ResumeAnalysisResult {
+  ats_score: number;
+  strengths: string[];
+  weaknesses: string[];
+  missing_keywords: string[];
+  suggestions: string[];
+}
+
+export interface ResumeStructuredSections {
+  summary: string;
+  experience: string[];
+  projects: string[];
+  skills: string[];
+  education: string[];
+}
+
+export interface ResumeGenerationPayload {
+  personalInfo: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    location?: string;
+    headline?: string;
+    linkedin?: string;
+    portfolio?: string;
+  };
+  education: Array<Record<string, string>>;
+  experience: Array<Record<string, string | boolean>>;
+  skills: string[];
+  projects: Array<Record<string, string>>;
+  targetRole?: string;
+  jobDescription?: string;
+}
+
+export interface ResumeGenerationResult {
+  sections: ResumeStructuredSections;
+}
+
+export interface ResumeTextImproveResult {
+  improvedText: string;
+  sections: ResumeStructuredSections;
 }
 
 const CHAT_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
@@ -172,6 +216,76 @@ Return ONLY valid JSON using this exact structure:
   "projects": [{"bullets": ["string"]}]
 }`;
 
+const ATS_ANALYSIS_PROMPT = `You are an ATS (Applicant Tracking System) expert.
+
+Analyze the following resume and provide:
+
+* ATS Score (0-100)
+* Strengths
+* Weaknesses
+* Missing keywords
+* Suggestions for improvement
+
+Resume:
+"""{resume_text}"""
+
+Return ONLY JSON:
+{
+"ats_score": number,
+"strengths": ["point1", "point2"],
+"weaknesses": ["point1", "point2"],
+"missing_keywords": ["keyword1"],
+"suggestions": ["tip1"]
+}`;
+
+const RESUME_GENERATION_PROMPT = `You are a professional resume writer.
+
+Create an ATS-optimized resume based on:
+
+{user_data}
+
+Rules:
+
+* Use strong action verbs
+* Add measurable impact
+* Keep it concise
+* Make it ATS-friendly
+
+Return structured JSON:
+{
+"sections": {
+"summary": "",
+"experience": [],
+"projects": [],
+"skills": [],
+"education": []
+}
+}`;
+
+const RESUME_IMPROVEMENT_PROMPT = `Improve the following resume content:
+
+* Make it ATS-friendly
+* Improve wording
+* Add impact metrics
+
+Resume:
+"{text}"
+
+Return improved version.`;
+
+const RESUME_STRUCTURING_PROMPT = `Convert the following resume text into structured JSON.
+Do not invent information.
+Return ONLY valid JSON:
+{
+  "sections": {
+    "summary": "",
+    "experience": [],
+    "projects": [],
+    "skills": [],
+    "education": []
+  }
+}`;
+
 function extractJsonObject(text: string) {
   const trimmed = text.trim();
   const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
@@ -180,6 +294,10 @@ function extractJsonObject(text: string) {
 
 function clampScore(value: unknown) {
   return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function unique(values: string[]) {
+  return Array.from(new Set(values.map((value) => String(value).trim()).filter(Boolean)));
 }
 
 function resolveQuestionBucket(role: string) {
@@ -210,14 +328,41 @@ function sanitizeInterviewQuestion(content: string) {
     .trim();
 }
 
-async function requestGroq(messages: ChatMessage[], maxTokens: number) {
+function normalizeStringArray(value: unknown) {
+  return unique(Array.isArray(value) ? value.map((item) => String(item)) : []);
+}
+
+function normalizeSections(value: unknown): ResumeStructuredSections {
+  const fallback: ResumeStructuredSections = {
+    summary: '',
+    experience: [],
+    projects: [],
+    skills: [],
+    education: [],
+  };
+
+  if (!value || typeof value !== 'object') {
+    return fallback;
+  }
+
+  const sections = value as Partial<ResumeStructuredSections>;
+  return {
+    summary: typeof sections.summary === 'string' ? sections.summary.trim() : '',
+    experience: normalizeStringArray(sections.experience),
+    projects: normalizeStringArray(sections.projects),
+    skills: normalizeStringArray(sections.skills),
+    education: normalizeStringArray(sections.education),
+  };
+}
+
+async function requestGroq(messages: ChatMessage[], maxTokens: number, temperature = 0.2) {
   if (!config.groq.apiKey) {
     logger.warn('GROQ_API_KEY not set, skipping Groq request');
     return null;
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
   try {
     const response = await fetch(CHAT_ENDPOINT, {
@@ -229,7 +374,7 @@ async function requestGroq(messages: ChatMessage[], maxTokens: number) {
       body: JSON.stringify({
         model: config.groq.model || 'llama-3.1-8b-instant',
         messages,
-        temperature: 0.2,
+        temperature,
         max_tokens: maxTokens,
       }),
       signal: controller.signal,
@@ -540,4 +685,120 @@ export async function improveResumeWithGroq(payload: ResumeImprovePayload): Prom
     logger.error('Groq resume improvement parse failed', { error, content });
     return null;
   }
+}
+
+export async function analyzeResumeWithGroq(resumeText: string): Promise<ResumeAnalysisResult | null> {
+  const content = await requestGroq(
+    [
+      {
+        role: 'user',
+        content: ATS_ANALYSIS_PROMPT.replace('{resume_text}', resumeText),
+      },
+    ],
+    700,
+    0.1
+  );
+
+  if (!content) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(extractJsonObject(content)) as Partial<ResumeAnalysisResult>;
+    return {
+      ats_score: clampScore(parsed.ats_score),
+      strengths: normalizeStringArray(parsed.strengths),
+      weaknesses: normalizeStringArray(parsed.weaknesses),
+      missing_keywords: normalizeStringArray(parsed.missing_keywords),
+      suggestions: normalizeStringArray(parsed.suggestions),
+    };
+  } catch (error) {
+    logger.error('Groq ATS analysis parse failed', { error, content });
+    return null;
+  }
+}
+
+export async function generateResumeWithGroq(payload: ResumeGenerationPayload): Promise<ResumeGenerationResult | null> {
+  const content = await requestGroq(
+    [
+      {
+        role: 'user',
+        content: RESUME_GENERATION_PROMPT.replace('{user_data}', JSON.stringify(payload, null, 2)),
+      },
+    ],
+    1200,
+    0.25
+  );
+
+  if (!content) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(extractJsonObject(content)) as Partial<ResumeGenerationResult>;
+    return {
+      sections: normalizeSections(parsed.sections),
+    };
+  } catch (error) {
+    logger.error('Groq resume generation parse failed', { error, content });
+    return null;
+  }
+}
+
+async function structureResumeText(text: string): Promise<ResumeStructuredSections | null> {
+  const content = await requestGroq(
+    [
+      {
+        role: 'system',
+        content: RESUME_STRUCTURING_PROMPT,
+      },
+      {
+        role: 'user',
+        content: text,
+      },
+    ],
+    1000,
+    0.1
+  );
+
+  if (!content) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(extractJsonObject(content)) as Partial<ResumeGenerationResult>;
+    return normalizeSections(parsed.sections);
+  } catch (error) {
+    logger.error('Groq resume structuring parse failed', { error, content });
+    return null;
+  }
+}
+
+export async function improveResumeTextWithGroq(text: string): Promise<ResumeTextImproveResult | null> {
+  const improvedText = await requestGroq(
+    [
+      {
+        role: 'user',
+        content: RESUME_IMPROVEMENT_PROMPT.replace('{text}', text),
+      },
+    ],
+    1200,
+    0.3
+  );
+
+  if (!improvedText) {
+    return null;
+  }
+
+  const sections = await structureResumeText(improvedText);
+  return {
+    improvedText: improvedText.trim(),
+    sections: sections || {
+      summary: '',
+      experience: [],
+      projects: [],
+      skills: [],
+      education: [],
+    },
+  };
 }

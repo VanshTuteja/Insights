@@ -15,7 +15,7 @@ const Layout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pt-16">
       <Navbar
         onToggleSidebar={() => {
           if (window.innerWidth < 768) {

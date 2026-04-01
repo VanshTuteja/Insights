@@ -2,6 +2,50 @@ import mongoose, { Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { IUser } from '../types';
 
+const resumeEntrySchema = new Schema(
+  {
+    title: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    template: {
+      type: String,
+      default: 'modern',
+      trim: true,
+    },
+    source: {
+      type: String,
+      enum: ['upload', 'builder', 'improvement'],
+      required: true,
+      default: 'builder',
+    },
+    content: {
+      type: String,
+      required: true,
+      default: '',
+    },
+    sections: {
+      summary: { type: String, default: '' },
+      experience: [{ type: String, default: '' }],
+      projects: [{ type: String, default: '' }],
+      skills: [{ type: String, default: '' }],
+      education: [{ type: String, default: '' }],
+    },
+    analysis: {
+      atsScore: { type: Number, default: 0 },
+      strengths: [{ type: String, default: '' }],
+      weaknesses: [{ type: String, default: '' }],
+      missingKeywords: [{ type: String, default: '' }],
+      suggestions: [{ type: String, default: '' }],
+    },
+  },
+  {
+    _id: false,
+    timestamps: true,
+  }
+);
+
 const userSchema = new Schema<IUser>({
   name: {
     type: String,
@@ -35,6 +79,10 @@ const userSchema = new Schema<IUser>({
   resumeUrl: {
     type: String,
     default: ''
+  },
+  resumes: {
+    type: [resumeEntrySchema],
+    default: []
   },
   phone: {
     type: String,

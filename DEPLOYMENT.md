@@ -18,9 +18,29 @@ NODE_ENV=production
 MONGODB_URI=mongodb+srv://...
 JWT_SECRET=your-secret
 FRONTEND_URL=https://your-app.vercel.app
+JWT_EXPIRES_IN=7d
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=2000
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+FROM=
+FROM_NAME=JobFinder AI
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+ADZUNA_APP_ID=
+ADZUNA_APP_KEY=
+ADZUNA_COUNTRY=in
+GOOGLE_APPLICATION_CREDENTIALS=
 GROQ_API_KEY=gsk_...          # From console.groq.com
 GROQ_MODEL=llama-3.1-8b-instant
+GOOGLE_TTS_LANGUAGE=hi-IN
+GOOGLE_TTS_VOICE=hi-IN-Wavenet-A
 WHISPER_SERVICE_URL=https://your-whisper-service.onrender.com
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=change_me
 ```
 
 ### Frontend (`client/.env`)

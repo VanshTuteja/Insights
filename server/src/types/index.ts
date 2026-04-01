@@ -9,6 +9,28 @@ export interface IUser extends Document {
   role: 'jobseeker' | 'employer' | 'admin';
   avatar?: string;
   resumeUrl?: string;
+  resumes: Array<{
+    title?: string;
+    template?: string;
+    source: 'upload' | 'builder' | 'improvement';
+    content: string;
+    sections?: {
+      summary?: string;
+      experience?: string[];
+      projects?: string[];
+      skills?: string[];
+      education?: string[];
+    };
+    analysis?: {
+      atsScore?: number;
+      strengths?: string[];
+      weaknesses?: string[];
+      missingKeywords?: string[];
+      suggestions?: string[];
+    };
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
   phone?: string;
   location?: string;
   bio?: string;
