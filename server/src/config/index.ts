@@ -85,7 +85,7 @@ export const config = {
   },
 
   email: {
-    host: sanitizeEnvString(process.env.SMTP_HOST) || 'smtp.gmail.com',
+    host: sanitizeEnvString(process.env.SMTP_HOST) || 'smtp-relay.brevo.com',
     port: parseNumber(process.env.SMTP_PORT, 587),
     secure: parseBoolean(process.env.SMTP_SECURE, false),
     auth: {

@@ -64,11 +64,13 @@ CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 
-SMTP_HOST=smtp.gmail.com
+SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=your_email
-SMTP_PASS=your_password
+SMTP_USER=your_brevo_login
+SMTP_PASS=your_brevo_smtp_key
+FROM=your_verified_sender@example.com
+FROM_NAME=JobFinder AI
 ```
 
 Suggested frontend variables:
