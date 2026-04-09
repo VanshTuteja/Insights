@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import type { FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
@@ -23,13 +24,27 @@ import { prepareAvatarFile } from '@/lib/image';
 import { resolveAssetUrl } from '@/lib/utils';
 
 const profileSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name cannot exceed 100 characters'),
   email: z.string().email('Invalid email address'),
   phone: z.string().optional(),
   location: z.string().optional(),
-  bio: z.string().optional(),
+  bio: z.string().max(500, 'Bio cannot exceed 500 characters').optional(),
   website: z.string().url('Invalid URL').optional().or(z.literal('')),
 });
+
+type ProfileDialogValues = z.infer<typeof profileSchema>;
+
+const getFirstFieldError = (errors: FieldErrors<ProfileDialogValues>): string | undefined => {
+  for (const value of Object.values(errors)) {
+    if (!value) continue;
+
+    if (typeof value === 'object' && 'message' in value && typeof value.message === 'string') {
+      return value.message;
+    }
+  }
+
+  return undefined;
+};
 
 interface ProfileDialogProps {
   open: boolean;
@@ -121,7 +136,7 @@ const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => 
     }
   };
 
-  const onSubmit = async (data: z.infer<typeof profileSchema>) => {
+  const onSubmit = async (data: ProfileDialogValues) => {
     setIsLoading(true);
     
     try {
@@ -148,6 +163,14 @@ const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => 
     }
   };
 
+  const onInvalid = (errors: FieldErrors<ProfileDialogValues>) => {
+    toast({
+      title: 'Please fix the highlighted fields',
+      description: getFirstFieldError(errors) || 'Review the form and try again.',
+      variant: 'destructive',
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -158,7 +181,7 @@ const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => 
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
           {/* Avatar Section */}
           <div className="flex flex-col items-center space-y-4">
             <div className="relative">
@@ -249,8 +272,12 @@ const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onOpenChange }) => 
               id="bio"
               placeholder="Tell us about yourself..."
               rows={4}
+              maxLength={500}
               {...form.register('bio')}
             />
+            {form.formState.errors.bio && (
+              <p className="text-sm text-destructive">{form.formState.errors.bio.message}</p>
+            )}
           </div>
 
           <div className="flex space-x-4 pt-4">

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import type { FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import axios from 'axios';
@@ -80,6 +81,18 @@ type ProfileFormValues = {
   education: string;
 };
 
+const getFirstFieldError = (errors: FieldErrors<ProfileFormValues>): string | undefined => {
+  for (const value of Object.values(errors)) {
+    if (!value) continue;
+
+    if (typeof value === 'object' && 'message' in value && typeof value.message === 'string') {
+      return value.message;
+    }
+  }
+
+  return undefined;
+};
+
 const emptyPreferences: ProfilePreferences = {
   preferredRoles: [],
   jobTypes: [],
@@ -132,12 +145,15 @@ const skillSuggestions = [
 
 const buildSchema = (isJobSeeker: boolean) =>
   z
-    .object({
-      name: z.string().min(2, 'Name must be at least 2 characters'),
+      .object({
+      name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name cannot exceed 100 characters'),
       email: z.string().email('Invalid email address'),
       phone: z.string().min(10, 'Phone number must be at least 10 digits'),
       location: z.string().min(2, 'Location is required'),
-      bio: z.string().min(20, 'Professional summary must be at least 20 characters'),
+      bio: z
+        .string()
+        .min(20, 'Professional summary must be at least 20 characters')
+        .max(500, 'Professional summary cannot exceed 500 characters'),
       website: z.string().url('Enter a valid website URL').or(z.literal('')),
       jobTitle: z.string().min(2, 'Job title is required'),
       company: z.string(),
@@ -395,7 +411,7 @@ const Profile: React.FC = () => {
   const onSubmit = async (data: ProfileFormValues) => {
     setIsSaving(true);
     try {
-      await updateProfile({
+      const payload = {
         ...data,
         website: data.website.trim(),
         company: data.company.trim(),
@@ -404,9 +420,11 @@ const Profile: React.FC = () => {
         experience: data.experience.trim(),
         education: data.education.trim(),
         avatar: avatarPreview || user?.avatar,
-        skills,
         preferences,
-      });
+        ...(skills.length > 0 ? { skills } : {}),
+      };
+
+      await updateProfile(payload);
 
       await getProfile();
 
@@ -429,6 +447,14 @@ const Profile: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const onInvalid = (errors: FieldErrors<ProfileFormValues>) => {
+    toast({
+      title: 'Please fix the highlighted fields',
+      description: getFirstFieldError(errors) || 'Review the form and try again.',
+      variant: 'destructive',
+    });
   };
 
   if (isAdmin) {
@@ -761,7 +787,7 @@ const Profile: React.FC = () => {
         </div>
 
         <AnimatedSection delay={0.12}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
             <Card className={mainCardClass}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -806,12 +832,13 @@ const Profile: React.FC = () => {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="bio">Professional Summary</Label>
-                  <Textarea
-                    id="bio"
-                    rows={5}
-                    placeholder={isJobSeeker ? 'Write a concise summary of your experience, skills, and career goals.' : 'Describe your company, hiring focus, and what candidates can expect.'}
-                    {...form.register('bio')}
-                  />
+                    <Textarea
+                      id="bio"
+                      rows={5}
+                      maxLength={500}
+                      placeholder={isJobSeeker ? 'Write a concise summary of your experience, skills, and career goals.' : 'Describe your company, hiring focus, and what candidates can expect.'}
+                      {...form.register('bio')}
+                    />
                   {form.formState.errors.bio && <p className="text-sm text-destructive">{form.formState.errors.bio.message}</p>}
                 </div>
               </CardContent>
