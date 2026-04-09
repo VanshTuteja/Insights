@@ -18,6 +18,7 @@ import notificationRoutes from './routes/notification';
 import resumeRoutes from './routes/resume';
 import adminRoutes from './routes/admin';
 import { startInterviewReminderService } from './services/interviewReminderService';
+import emailService from './utils/emailService';
 
 const app = express();
 
@@ -178,6 +179,7 @@ async function startServer() {
   try {
     // Connect to MongoDB
     await dbConnection.connect();
+    await emailService.verifyConnection();
 
     // Start server
     app.listen(config.port, () => {

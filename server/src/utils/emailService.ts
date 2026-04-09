@@ -28,6 +28,49 @@ class EmailService {
         return Boolean(config.email.auth.user && config.email.auth.pass);
     }
 
+    getConfiguredFromAddress(): string {
+        return (process.env.FROM || config.email.auth.user || '').trim().toLowerCase();
+    }
+
+    async verifyConnection(): Promise<boolean> {
+        if (!this.isConfigured()) {
+            logger.warn('SMTP verification skipped because SMTP is not configured');
+            return false;
+        }
+
+        const smtpUser = (config.email.auth.user || '').trim().toLowerCase();
+        const fromAddress = this.getConfiguredFromAddress();
+
+        if (smtpUser && fromAddress && smtpUser !== fromAddress) {
+            logger.warn('SMTP FROM address does not match authenticated SMTP user', {
+                fromAddress,
+                smtpUser,
+            });
+        }
+
+        try {
+            await this.transporter.verify();
+            logger.info('SMTP connection verified successfully', {
+                host: config.email.host,
+                port: config.email.port,
+                secure: config.email.secure,
+                smtpUser,
+                fromAddress,
+            });
+            return true;
+        } catch (error) {
+            logger.error('SMTP connection verification failed', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                host: config.email.host,
+                port: config.email.port,
+                secure: config.email.secure,
+                smtpUser,
+                fromAddress,
+            });
+            return false;
+        }
+    }
+
     async sendEmail(options: EmailOptions): Promise<void> {
         try {
             if (!this.isConfigured()) {
