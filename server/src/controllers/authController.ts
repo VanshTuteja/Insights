@@ -182,6 +182,8 @@ export const signup = async (req: Request, res: Response) => {
     const otpExpiry = new Date(Date.now() + OTP_TTL_MS);
     const otpResendAvailableAt = new Date(Date.now() + OTP_RESEND_COOLDOWN_MS);
 
+    let createdUserId: string | null = null;
+
     if (existingUser) {
       existingUser.name = name.trim();
       existingUser.passwordHash = password;
@@ -204,9 +206,28 @@ export const signup = async (req: Request, res: Response) => {
         otpResendAvailableAt
       });
       await user.save();
+      createdUserId = user._id.toString();
     }
 
-    await sendOtpOrFail(email, otp, 'verify-email');
+    try {
+      await sendOtpOrFail(email, otp, 'verify-email');
+    } catch (emailError: any) {
+      if (createdUserId) {
+        await User.findByIdAndDelete(createdUserId);
+      }
+
+      logger.error('Signup OTP email send failed', {
+        email,
+        smtpConfigured: emailService.isConfigured(),
+        error: emailError.message,
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Signup failed because the email service is not working. Please check SMTP settings and try again.',
+        data: { code: 'EMAIL_SEND_FAILED' },
+      });
+    }
 
     logger.info('OTP sent successfully', { email });
 
