@@ -66,6 +66,7 @@ CLOUDINARY_API_SECRET=your_api_secret
 
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
+SMTP_SECURE=false
 SMTP_USER=your_email
 SMTP_PASS=your_password
 ```

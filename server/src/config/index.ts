@@ -47,6 +47,13 @@ const parseNumber = (value: string | undefined, fallback: number) => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const parseBoolean = (value: string | undefined, fallback: boolean) => {
+  const normalized = sanitizeEnvString(value).toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+};
+
 export const config = {
   port: parseNumber(process.env.PORT, 5000),
   nodeEnv: sanitizeEnvString(process.env.NODE_ENV) || 'development',
@@ -80,7 +87,7 @@ export const config = {
   email: {
     host: sanitizeEnvString(process.env.SMTP_HOST) || 'smtp.gmail.com',
     port: parseNumber(process.env.SMTP_PORT, 587),
-    secure: false,
+    secure: parseBoolean(process.env.SMTP_SECURE, false),
     auth: {
       user: sanitizeEnvString(process.env.SMTP_USER),
       // Gmail app passwords are often copied as 4-character groups with spaces.
