@@ -29,6 +29,9 @@ const sanitizeEnvString = (value: string | undefined) => {
   return trimmed;
 };
 
+const sanitizeSmtpPassword = (value: string | undefined) =>
+  sanitizeEnvString(value).replace(/\s+/g, '');
+
 const rawMongoUri = sanitizeEnvString(process.env.MONGODB_URI);
 const mongoEnvDebug = {
   envFileLoaded: resolvedEnvPath || '(default dotenv resolution)',
@@ -80,7 +83,8 @@ export const config = {
     secure: false,
     auth: {
       user: sanitizeEnvString(process.env.SMTP_USER),
-      pass: sanitizeEnvString(process.env.SMTP_PASS),
+      // Gmail app passwords are often copied as 4-character groups with spaces.
+      pass: sanitizeSmtpPassword(process.env.SMTP_PASS),
     },
   },
 
