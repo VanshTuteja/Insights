@@ -249,11 +249,10 @@ const EmployerInterviews: React.FC = () => {
 
                   <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4">
                     <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-primary" />
+                      {/* <Calendar className="h-4 w-4 text-primary" /> */}
                       <span>{scheduledAt.toLocaleDateString()}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-primary" />
                       <span>{scheduledAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({interview.duration} min)</span>
                     </div>
                     <div className="flex items-center gap-2 capitalize">
@@ -393,7 +392,7 @@ const EmployerInterviews: React.FC = () => {
                   disabled={Boolean(activeAction)}
                   aria-label="Open calendar"
                 >
-                  <Calendar className="h-4 w-4" />
+                  <Calendar className="h-4 w-4 text-primary" />
                 </button>
               </div>
               <div className="relative">
@@ -416,7 +415,7 @@ const EmployerInterviews: React.FC = () => {
                   disabled={Boolean(activeAction)}
                   aria-label="Open time picker"
                 >
-                  <Clock className="h-4 w-4" />
+                   <Clock className="h-4 w-4 text-primary" />
                 </button>
               </div>
             </div>
