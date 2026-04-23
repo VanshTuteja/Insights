@@ -154,13 +154,13 @@ const createEntry = (type: 'experience' | 'project' | 'education' | 'certificati
 
 const INITIAL_FORM: BuildFormState = {
   personalInfo: {
-    name: 'Alex Johnson',
-    email: 'alex@email.com',
+    name: 'Vansh Tuteja',
+    email: 'vanshtuteja@email.com',
     phone: '+91 98765 43210',
     location: 'Bengaluru, India',
     headline: 'Full Stack Developer | MERN | AI-Assisted Product Building',
-    linkedin: 'linkedin.com/in/alexjohnson',
-    portfolio: 'alexbuilds.dev',
+    linkedin: 'linkedin.com/in/vanshtuteja',
+    portfolio: 'vanshbuilds.dev',
   },
   targetRole: 'Full Stack Developer',
   jobDescription: '',
